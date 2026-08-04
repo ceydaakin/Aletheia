@@ -1,0 +1,13 @@
+{
+  "answer": "Fesih ihbar süresi 30 gündür. Bu süre kamu sözleşmelerinde de geçerlidir.",
+  "claims": [
+    {
+      "text": "Fesih ihbar süresi 30 gündür.",
+      "citations": ["doc_412:v3:chunk_18"]
+    },
+    {
+      "text": "Bu süre kamu sözleşmelerinde de geçerlidir.",
+      "citations": []
+    }
+  ]
+}

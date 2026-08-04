@@ -1,0 +1,23 @@
+{
+  "chunks": [
+    {
+      "chunk_id": "doc_412:v3:chunk_18",
+      "doc_id": "doc_412",
+      "version": 3,
+      "title": "Hizmet Sözleşmesi (rev. 3)",
+      "text": "Taraflardan her biri, otuz (30) gün önceden yazılı ihbarda bulunmak suretiyle sözleşmeyi feshedebilir.",
+      "score": 0.91
+    },
+    {
+      "chunk_id": "doc_412:v3:chunk_19",
+      "doc_id": "doc_412",
+      "version": 3,
+      "title": "Hizmet Sözleşmesi (rev. 3)",
+      "text": "Bu bölümdeki ihbar koşulları 1 Ocak 2024 sonrasında imzalanan sözleşmelere uygulanır.",
+      "score": 0.74
+    }
+  ],
+  "k": 24,
+  "reranked_to": 6,
+  "latency_ms": 310
+}

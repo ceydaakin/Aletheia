@@ -1,0 +1,160 @@
+name: aletheia
+
+# Shared definition for the five Python services: one image, different commands.
+x-python: &python
+  build:
+    context: ./python
+  env_file:
+    - path: .env
+      required: false
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-py-health: &py-health
+  # The image has no curl, and adding one just to ship a health check is not a
+  # trade worth making. PORT is read from the environment inside Python because
+  # the exec form of `test` gets no shell to expand it.
+  test:
+    - CMD
+    - python
+    - -c
+    - "import os, sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:' + os.environ['PORT'] + '/healthz', timeout=2).status == 200 else 1)"
+  interval: 10s
+  timeout: 3s
+  retries: 5
+  start_period: 10s
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aletheia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aletheia}
+      POSTGRES_DB: ${POSTGRES_DB:-aletheia}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Postgres runs these in alphabetical order on first initialisation.
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aletheia} -d ${POSTGRES_DB:-aletheia}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.10-alpine
+    # JetStream: ingestion needs at-least-once delivery with per-document ack, so
+    # a crash mid-corpus resumes instead of restarting.
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - natsdata:/data
+    restart: unless-stopped
+
+  retrieval:
+    <<: *python
+    command: ["uvicorn", "aletheia.retrieval.app:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      PORT: 8001
+    ports:
+      - "8001:8001"
+    healthcheck: *py-health
+
+  generation:
+    <<: *python
+    command: ["uvicorn", "aletheia.generation.app:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment:
+      PORT: 8002
+    ports:
+      - "8002:8002"
+    healthcheck: *py-health
+
+  verifier:
+    <<: *python
+    command: ["uvicorn", "aletheia.verifier.app:app", "--host", "0.0.0.0", "--port", "8003"]
+    environment:
+      PORT: 8003
+    ports:
+      - "8003:8003"
+    healthcheck: *py-health
+
+  risk:
+    <<: *python
+    command: ["uvicorn", "aletheia.risk.app:app", "--host", "0.0.0.0", "--port", "8004"]
+    environment:
+      PORT: 8004
+    ports:
+      - "8004:8004"
+    healthcheck: *py-health
+
+  ingestion:
+    <<: *python
+    command: ["python", "-m", "aletheia.ingestion.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  gateway:
+    build:
+      context: ./gateway
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GATEWAY_ADDR: ":8080"
+      RETRIEVAL_URL: http://retrieval:8001
+      GENERATION_URL: http://generation:8002
+      VERIFIER_URL: http://verifier:8003
+      RISK_URL: http://risk:8004
+    ports:
+      - "8080:8080"
+    depends_on:
+      retrieval:
+        condition: service_healthy
+      generation:
+        condition: service_healthy
+      verifier:
+        condition: service_healthy
+      risk:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- Observability (opt-in: `docker compose --profile obs up`) -------------
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["obs"]
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: ["obs"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  natsdata:
+  grafanadata:

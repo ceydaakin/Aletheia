@@ -1,0 +1,29 @@
+{
+  "decision": "abstain",
+  "answer": "",
+  "claims": [],
+  "risk": {
+    "budget": 0.05,
+    "statistic": 0.87,
+    "threshold": 0.38,
+    "guarantee": "no guarantee issued: abstained",
+    "calibration_id": "cal_2026_07_tr"
+  },
+  "retrieval": {
+    "k": 24,
+    "reranked_to": 6,
+    "latency_ms": 288
+  },
+  "abstain_reason": "insufficient_evidence",
+  "suggested_sources": [
+    {
+      "chunk_id": "doc_412:v3:chunk_18",
+      "doc_id": "doc_412",
+      "title": "Hizmet Sözleşmesi (rev. 3)",
+      "score": 0.91,
+      "snippet": "Taraflardan her biri, otuz (30) gün önceden yazılı ihbarda bulunmak suretiyle…"
+    }
+  ],
+  "degraded": false,
+  "trace_id": "01JZQ4Y7K8M2N5P9R3T6V8W1XA"
+}

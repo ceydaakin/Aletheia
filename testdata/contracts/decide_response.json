@@ -1,0 +1,24 @@
+{
+  "decision": "answer_with_flags",
+  "statistic": 0.06,
+  "threshold": 0.38,
+  "calibration_id": "cal_2026_07_tr",
+  "guarantee": "P(unsupported_claim) <= 0.05 with 95% confidence, calibration_id=cal_2026_07_tr",
+  "degraded": false,
+  "claims": [
+    {
+      "text": "Fesih ihbar süresi 30 gündür.",
+      "citations": ["doc_412:v3:chunk_18"],
+      "support_score": 0.94,
+      "status": "supported",
+      "action": "kept"
+    },
+    {
+      "text": "Bu süre kamu sözleşmelerinde de geçerlidir.",
+      "citations": [],
+      "support_score": 0.11,
+      "status": "unsupported",
+      "action": "removed"
+    }
+  ]
+}

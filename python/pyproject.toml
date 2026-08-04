@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aletheia"
+version = "0.1.0"
+description = "Risk-controlled RAG gateway — model services"
+requires-python = ">=3.11"
+license = { text = "TBD" }
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+]
+
+# Heavy model dependencies are optional so that working on the gateway or the
+# risk controller does not require pulling multi-gigabyte wheels (ADR-0003).
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "ruff>=0.7",
+]
+db = [
+    "psycopg[binary,pool]>=3.2",
+    "pgvector>=0.3",
+]
+models = [
+    "torch>=2.4",
+    "sentence-transformers>=3.2",
+    "transformers>=4.45",
+]
+ingest = [
+    "nats-py>=2.9",
+    "pypdf>=5.0",
+    "beautifulsoup4>=4.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aletheia"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    # Long lines in docstrings and comments carry the reasoning; the formatter
+    # handles code width.
+    "E501",
+    # "Ambiguous unicode character". This codebase writes α, λ, and ≤ because it
+    # is about conformal risk control, and carries Turkish text throughout.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["aletheia"]

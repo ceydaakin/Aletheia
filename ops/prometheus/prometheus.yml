@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: gateway
+    static_configs:
+      - targets: ["gateway:8080"]
+
+  - job_name: services
+    static_configs:
+      - targets:
+          - "retrieval:8001"
+          - "generation:8002"
+          - "verifier:8003"
+          - "risk:8004"
+
+  # The panels that matter for this project are not the usual RED metrics:
+  #   aletheia_gateway_decisions_total{decision="abstain"} / …_total
+  #     -> answer rate, the number G2 is about
+  #   aletheia_gateway_abstentions_total{reason="stale_calibration"}
+  #     -> abstentions caused by us, not by the corpus. Should be ~0
+  #   aletheia_gateway_stage_duration_seconds{stage="verifier"}
+  #     -> the expected latency bottleneck
+  # Dashboards land in week 10 alongside the k3s deployment.

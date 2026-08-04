@@ -1,0 +1,42 @@
+# --- Environment ---
+.env
+.env.local
+*.local
+
+# --- Go ---
+gateway/bin/
+*.exe
+*.test
+*.out
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+
+# --- Data / models / caches ---
+data/
+corpora/
+models/
+.cache/
+eval/runs/
+eval/cache/
+*.duckdb
+*.sqlite3
+
+# --- Ops ---
+.grafana-data/
+.pg-data/
+*.log
+
+# --- Editors ---
+.idea/
+.vscode/
+.DS_Store
