@@ -46,3 +46,17 @@ the test suite both call it; a new entrypoint must too.
   A citation that does not point at what it claims to is worse than no citation.
 - Nothing in the corpus is ever deleted or overwritten. Amendments close a validity
   interval; corrections retract knowledge. Both keep the old rows.
+
+## Retrieval notes
+
+- Temporal predicates COALESCE to the **database's** `now()`, never the application's.
+  `recorded_at` is written by Postgres, so comparing it against a client clock makes
+  results depend on skew between two machines — a client running a fraction of a second
+  behind cannot see rows it just wrote, and it presents as an empty result set rather
+  than an error.
+- `query_tsquery` (migration 0003) builds a **disjunctive** tsquery. Postgres's built-in
+  parsers AND their terms, which requires the chunk to contain every word of the
+  question; that measured 0.02 recall on bootstrap-tr.
+- Chunks with `embedding IS NULL` are excluded from the dense arm explicitly. Without the
+  predicate they sort last rather than being excluded, padding the list with unranked
+  chunks.

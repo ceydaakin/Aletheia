@@ -94,6 +94,11 @@ class RetrieveRequest(Base):
     query: str
     as_of: str = ""
     k: int = 24
+    lang: str = ""
+    """Language of the query. Empty means "run one lexical arm per language in the
+    corpus", which is correct but costs an extra index scan (ADR-0006)."""
+    top_n: int = 0
+    """Chunks to return after reranking. 0 uses the service default."""
 
 
 class RetrieveResponse(Base):

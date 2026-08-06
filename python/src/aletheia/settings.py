@@ -28,9 +28,24 @@ class Settings(BaseSettings):
     chunk_min_chars: int = 120
 
     # Embedding backend: "null" stores no vectors and leaves chunks lexically
-    # retrievable; "sentence-transformers" needs the `models` extra. Week 3
-    # backfills the NULLs, so this is a config flip rather than a code change.
+    # retrievable; "sentence-transformers" needs the `models` extra. Backfill
+    # existing chunks with `python -m aletheia.ingestion.backfill`.
     embedding_backend: str = "null"
+
+    # Retrieval. The arms are deliberately wider than what generation sees:
+    # recall cannot be recovered downstream, precision can (ADR-0006).
+    retrieval_lexical_k: int = 50
+    retrieval_dense_k: int = 50
+    retrieval_rrf_k: int = 60
+    retrieval_top_n: int = 6
+    """How many chunks generation actually receives."""
+
+    # Reranker backend: "null" preserves fusion order and keeps the stack
+    # runnable without torch; "cross-encoder" needs the `models` extra.
+    reranker_backend: str = "null"
+    rerank_max_candidates: int = 32
+    """Cross-encoding is one forward pass per candidate. This cap is what keeps
+    the retrieval stage inside its 1.2 s budget."""
 
     # Models. Mostly unused by the scaffold; wired up from week 3 onwards.
     embedding_model: str = "intfloat/multilingual-e5-base"

@@ -22,6 +22,11 @@ type RetrieveRequest struct {
 	Query    string `json:"query"`
 	AsOf     string `json:"as_of,omitempty"`
 	K        int    `json:"k"`
+	// Lang is the query's language. Empty means retrieval runs one lexical arm
+	// per language present in the corpus (ADR-0006).
+	Lang string `json:"lang,omitempty"`
+	// TopN is how many chunks to return after reranking. 0 uses the service default.
+	TopN int `json:"top_n,omitempty"`
 }
 
 type RetrieveResponse struct {

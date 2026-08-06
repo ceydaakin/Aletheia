@@ -14,8 +14,8 @@ from urllib.request import url2pathname
 from psycopg import AsyncConnection
 
 from aletheia.db import Database
+from aletheia.embedding import Embedder
 from aletheia.ingestion.chunking import ChunkConfig
-from aletheia.ingestion.embedding import Embedder
 from aletheia.ingestion.messages import IngestMessage
 from aletheia.ingestion.parsing import UnsupportedMediaType, detect_media_type, parse
 from aletheia.ingestion.store import IngestError, IngestResult, ingest_document

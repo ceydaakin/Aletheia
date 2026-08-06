@@ -17,11 +17,12 @@ P(unsupported claim) <= 0.05, with 95% confidence — calibration_id=cal_2026_07
 …and, when the evidence is too thin to honour it, an `abstain` with a reason code and
 the three best sources instead of a fluent guess.
 
-**Status: week 2 of 12.** Ingestion and the bitemporal chunk store are real — documents
-are parsed, chunked with exact character spans, versioned, and queryable at any point in
-history. Retrieval, generation, verification, and calibration are still stubs returning
-well-formed placeholder data. See [docs/PRD.md](docs/PRD.md) for the full product spec
-(Turkish) and [docs/adr/](docs/adr/) for the architecture decisions.
+**Status: week 3 of 12.** Ingestion, the bitemporal chunk store, and hybrid retrieval are
+real: documents are parsed, chunked with exact character spans, versioned, indexed with
+language-aware full-text search alongside pgvector, and retrieved as of any point in
+history. Generation, verification, and calibration are still stubs returning well-formed
+placeholder data. See [docs/PRD.md](docs/PRD.md) for the full product spec (Turkish) and
+[docs/adr/](docs/adr/) for the architecture decisions.
 
 ---
 
@@ -110,6 +111,50 @@ Correcting a mistake is a *different* operation from recording an amendment
 applied. Getting that distinction wrong erases history, which is why the caller has to
 state which one they mean.
 
+## Retrieval
+
+Lexical and dense arms run concurrently and fuse with Reciprocal Rank Fusion, then the
+fused head is reranked to what generation sees (ADR-0006). Recall is what matters here:
+a chunk retrieval misses cannot be recovered by the reranker or the verifier, so the
+arms are deliberately wider than the final cut.
+
+The lexical arm picks its stemmer from each chunk's language — Turkish is agglutinative,
+so `sözleşme` has to match `sözleşmeyi` and `sözleşmelerde`, and `unaccent` makes
+`sozlesme` match all three. Dense retrieval is optional: with `EMBEDDING_BACKEND=null`
+chunks carry no vectors, RRF over a single list is that list's ranking, and everything
+still works. Turning it on is a config flip plus a backfill:
+
+```bash
+pip install -e "python[models]"
+EMBEDDING_BACKEND=sentence-transformers python -m aletheia.ingestion.backfill --tenant demo
+```
+
+Measure it:
+
+```bash
+cd python
+python -m aletheia.eval.retrieval --dataset ../eval/datasets/bootstrap-tr --ingest
+```
+
+### Week 3 baseline — bootstrap-tr
+
+24 answerable queries, 3 deliberately unanswerable, 8 documents, 12 chunks, lexical arm
+only (no embeddings):
+
+| configuration | recall@1 | recall@3 | recall@5 | recall@10 | nDCG@10 | MRR |
+|---|---|---|---|---|---|---|
+| lexical-only | 0.576 | 0.806 | 0.840 | 0.924 | 0.831 | 0.910 |
+
+**Read recall@1 and recall@3, not recall@10.** With 12 chunks in the corpus a top-10 cut
+returns most of it, so recall@10 flatters any system that returns anything. This is a
+smoke test with real signal, not a benchmark result — week 4 replaces it with 400
+verified QA triples.
+
+Retrieval returns something for all three unanswerable queries. That is expected, not a
+defect: disjunctive matching retrieves anything sharing a term, so retrieval alone cannot
+identify out-of-corpus questions. Deciding that no answer is supportable is the
+verifier's and the risk controller's job.
+
 ## Repository layout
 
 | Path | What lives there |
@@ -122,7 +167,8 @@ state which one they mean.
 | `python/src/aletheia/risk/` | Calibration and runtime threshold decisions — *the heart of the project*. |
 | `python/src/aletheia/ingestion/` | Parse → chunk → embed → version, over NATS or the CLI. |
 | `db/migrations/` | SQL migrations. The bitemporal chunk store lives here. |
-| `eval/` | Datasets, harness, and result tables. |
+| `python/src/aletheia/eval/` | Metrics and the evaluation harness. A tool, not a service, so it may import from what it measures. |
+| `eval/datasets/` | Labelled corpora. Gold labels name documents, not chunk ids, so they survive a chunking change. |
 | `docs/` | PRD and ADRs. |
 | `ops/` | Prometheus/Grafana config; k3s manifests land here in week 10. |
 
@@ -163,8 +209,8 @@ including `tenants`.
 | Week | Milestone |
 |---|---|
 | 1 | Scope lock, corpora, repo skeleton |
-| 2 | **Ingestion + bitemporal chunk store — you are here** |
-| 3 | Hybrid retrieval + reranker |
+| 2 | Ingestion + bitemporal chunk store |
+| 3 | **Hybrid retrieval + reranker — you are here** |
 | 4 | EN eval set v1 (400 verified QA triples) |
 | 5 | Cited generation + claim decomposer |
 | 6 | Verifier integration |

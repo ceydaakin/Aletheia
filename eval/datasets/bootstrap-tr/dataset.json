@@ -1,0 +1,157 @@
+{
+  "name": "bootstrap-tr",
+  "lang": "tr",
+  "description": "Small hand-labelled Turkish corpus for the week-3 retrieval baseline. Eight policy documents in the register the primary persona works in, with deliberate distractors: several documents mention notice periods, payment terms, and six-monthly reviews, but only one states each specific number. Superseded in week 9 by TR-Domain at full size; the numbers here are a smoke test with a real signal, not a benchmark result.",
+  "queries": [
+    {
+      "id": "tr-01",
+      "text": "Sözleşmeyi feshetmek için kaç gün önceden ihbar gerekir?",
+      "relevant_docs": ["hizmet-sozlesmesi.md"],
+      "note": "Morphology: query has 'sözleşmeyi', corpus has 'sözleşmeyi' and 'sözleşmelere'. Distractors: satin-alma-yetki.md and tedarikci-denetim.md both discuss contract termination."
+    },
+    {
+      "id": "tr-02",
+      "text": "haklı sebeple fesihte ihbar süresi aranır mı",
+      "relevant_docs": ["hizmet-sozlesmesi.md"]
+    },
+    {
+      "id": "tr-03",
+      "text": "sozlesme fesih ihbar suresi",
+      "relevant_docs": ["hizmet-sozlesmesi.md"],
+      "note": "Same question as tr-01 typed without Turkish diacritics — this is what unaccent buys."
+    },
+    {
+      "id": "tr-04",
+      "text": "Çalışan özlük dosyaları ne kadar süreyle saklanır?",
+      "relevant_docs": ["kisisel-veri-saklama.md"]
+    },
+    {
+      "id": "tr-05",
+      "text": "kamera kayıtları ne zaman silinir",
+      "relevant_docs": ["kisisel-veri-saklama.md"],
+      "note": "Distractor: bilgi-guvenligi.md discusses backups and retention of logs."
+    },
+    {
+      "id": "tr-06",
+      "text": "işe alınmayan adayların özgeçmişleri ne kadar tutulur",
+      "relevant_docs": ["kisisel-veri-saklama.md"]
+    },
+    {
+      "id": "tr-07",
+      "text": "Hibrit çalışmada haftada kaç gün ofiste bulunmak gerekiyor?",
+      "relevant_docs": ["uzaktan-calisma.md"]
+    },
+    {
+      "id": "tr-08",
+      "text": "uzaktan çalışanlara internet gideri ödeniyor mu",
+      "relevant_docs": ["uzaktan-calisma.md"],
+      "note": "Distractor: seyahat-harcirah.md is the other document about reimbursing employee expenses."
+    },
+    {
+      "id": "tr-09",
+      "text": "kişisel bilgisayardan şirket verilerine erişebilir miyim",
+      "relevant_docs": ["uzaktan-calisma.md", "bilgi-guvenligi.md"],
+      "note": "Genuinely spans two documents: the remote-work directive forbids it, the security policy governs access rights."
+    },
+    {
+      "id": "tr-10",
+      "text": "100.000 TL'lik bir alım için kimin onayı gerekir?",
+      "relevant_docs": ["satin-alma-yetki.md"],
+      "note": "Requires reading a threshold band, not matching a literal number. The figure in the query appears nowhere in the corpus."
+    },
+    {
+      "id": "tr-11",
+      "text": "kaç tedarikçiden teklif almak zorunludur",
+      "relevant_docs": ["satin-alma-yetki.md"]
+    },
+    {
+      "id": "tr-12",
+      "text": "tedarikçi faturaları kaç günde ödenir",
+      "relevant_docs": ["satin-alma-yetki.md"],
+      "note": "Distractor: hizmet-sozlesmesi.md also contains a 30-day figure, for a different thing."
+    },
+    {
+      "id": "tr-13",
+      "text": "10 yıllık çalışanın yıllık izin hakkı kaç gündür",
+      "relevant_docs": ["yillik-izin.md"],
+      "note": "Band lookup again: the corpus says 'beş yıldan fazla on beş yıldan az', never '10 yıl'."
+    },
+    {
+      "id": "tr-14",
+      "text": "yıllık izin bölünerek kullanılabilir mi",
+      "relevant_docs": ["yillik-izin.md"]
+    },
+    {
+      "id": "tr-15",
+      "text": "kullanılmayan izinler bir sonraki yıla devreder mi",
+      "relevant_docs": ["yillik-izin.md"]
+    },
+    {
+      "id": "tr-16",
+      "text": "parola kaç karakter olmalı",
+      "relevant_docs": ["bilgi-guvenligi.md"]
+    },
+    {
+      "id": "tr-17",
+      "text": "veri ihlali kaç saat içinde Kurula bildirilir",
+      "relevant_docs": ["bilgi-guvenligi.md"],
+      "note": "Distractor: tedarikci-denetim.md also discusses breach notification obligations, without the deadline."
+    },
+    {
+      "id": "tr-18",
+      "text": "işten ayrılan çalışanın erişimleri ne zaman kapatılır",
+      "relevant_docs": ["bilgi-guvenligi.md"]
+    },
+    {
+      "id": "tr-19",
+      "text": "Ankara'da otel için gecelik limit ne kadar?",
+      "relevant_docs": ["seyahat-harcirah.md"]
+    },
+    {
+      "id": "tr-20",
+      "text": "kendi arabamla seyahat edersem kilometre başına ne alırım",
+      "relevant_docs": ["seyahat-harcirah.md"]
+    },
+    {
+      "id": "tr-21",
+      "text": "masraf beyanını ne zamana kadar girmem gerekiyor",
+      "relevant_docs": ["seyahat-harcirah.md"],
+      "note": "Distractor: three other documents contain a 15-day deadline for something else."
+    },
+    {
+      "id": "tr-22",
+      "text": "kritik tedarikçiler ne sıklıkla denetlenir",
+      "relevant_docs": ["tedarikci-denetim.md"]
+    },
+    {
+      "id": "tr-23",
+      "text": "denetim bulgularını gidermek için ne kadar süre var",
+      "relevant_docs": ["tedarikci-denetim.md"]
+    },
+    {
+      "id": "tr-24",
+      "text": "tedarikçi alt işleyen kullanabilir mi",
+      "relevant_docs": ["tedarikci-denetim.md"]
+    },
+    {
+      "id": "tr-25",
+      "text": "şirketin doğum izni politikası nedir",
+      "relevant_docs": [],
+      "category": "unanswerable",
+      "note": "Adjacent to yillik-izin.md in vocabulary — 'izin' is the same word — but parental leave is genuinely absent. Retrieving nothing is the correct outcome."
+    },
+    {
+      "id": "tr-26",
+      "text": "2027 yılı için öngörülen ciro hedefi kaçtır",
+      "relevant_docs": [],
+      "category": "unanswerable"
+    },
+    {
+      "id": "tr-27",
+      "text": "şirket hangi bulut sağlayıcısını kullanıyor",
+      "relevant_docs": [],
+      "category": "unanswerable",
+      "note": "bilgi-guvenligi.md discusses backups in another geographic region, which is close enough to be tempting."
+    }
+  ]
+}

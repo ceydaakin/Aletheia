@@ -147,6 +147,19 @@ jobs:
           sleep 5
           status=$(curl -sf "localhost:8005/jobs/$job" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
           [ "$status" = "unchanged" ] || { echo "::error::expected unchanged, got $status"; exit 1; }
+
+      - name: An ingested document is retrievable end to end
+        run: |
+          body=$(curl -sf localhost:8080/v1/answer \
+            -H 'Authorization: Bearer demo-key-change-me' \
+            -H 'Content-Type: application/json' \
+            -d '{"query":"terminate written notice period","mode":"strict"}')
+          echo "$body"
+          # Retrieval now reads the corpus, so a document ingested a step ago must
+          # come back as a citation. Anything else means the arms are not wired to
+          # the store.
+          echo "$body" | grep -q "ci/notice.txt" \
+            || { echo "::error::the ingested document was not cited"; exit 1; }
       - name: Logs on failure
         if: failure()
         run: docker compose logs --no-color

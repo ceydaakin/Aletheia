@@ -23,8 +23,8 @@ from nats.js.errors import BadRequestError
 from pydantic import ValidationError
 
 from aletheia.db import Database
+from aletheia.embedding import Embedder
 from aletheia.ingestion import jobs, pipeline
-from aletheia.ingestion.embedding import Embedder
 from aletheia.ingestion.messages import IngestMessage
 from aletheia.ingestion.store import IngestError
 from aletheia.metrics import registry

@@ -20,8 +20,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from aletheia.db import Database, configure_event_loop
+from aletheia.embedding import get_embedder
 from aletheia.ingestion import pipeline
-from aletheia.ingestion.embedding import get_embedder
 from aletheia.ingestion.messages import IngestMessage
 from aletheia.ingestion.parsing import MEDIA_TYPES
 from aletheia.ingestion.store import IngestError, Outcome

@@ -11,6 +11,7 @@ consequences we dislike.
 | [0003](0003-python-monorepo-one-image.md) | One Python distribution, many service entrypoints | Accepted |
 | [0004](0004-risk-control-at-response-boundary.md) | Risk control applies to the whole response, not per claim | Accepted |
 | [0005](0005-ingestion-and-versioning-semantics.md) | Amendment vs correction vs no-op; identity is extracted text | Accepted |
+| [0006](0006-hybrid-retrieval.md) | Hybrid retrieval: RRF over BM25 and dense, then reranked | Accepted |
 
 New ADR: copy the shape of 0001, take the next number, never edit an accepted one —
 supersede it with a new record and mark the old one `Superseded by ADR-NNNN`.

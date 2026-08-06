@@ -26,36 +26,31 @@ ALL_APPS = {
 
 
 @pytest.mark.parametrize("name", sorted(ALL_APPS))
-def test_operational_endpoints(name: str) -> None:
+def test_healthz_does_not_depend_on_anything(name: str) -> None:
+    """Liveness must stay green even with no database.
+
+    Retrieval reaches Postgres now; if a slow database could fail its liveness
+    probe, the orchestrator would restart-loop a process whose only problem is
+    that a dependency is late.
+    """
     with TestClient(ALL_APPS[name]) as client:
         health = client.get("/healthz")
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "service": name}
-
-        assert client.get("/readyz").status_code == 200
         assert client.get("/metrics").status_code == 200
 
 
-def test_retrieval_returns_nothing_for_an_out_of_corpus_query() -> None:
-    with TestClient(retrieval_app) as client:
-        resp = client.post(
-            "/retrieve",
-            json={"tenant_id": "acme", "query": "zzzz unrelated xylophone", "k": 24},
-        )
-        assert resp.status_code == 200
-        # Empty is a valid, important answer: it is what drives out_of_corpus.
-        assert resp.json()["chunks"] == []
+@pytest.mark.parametrize("name", ["generation", "verifier", "risk"])
+def test_stateless_services_are_ready_without_dependencies(name: str) -> None:
+    with TestClient(ALL_APPS[name]) as client:
+        assert client.get("/readyz").status_code == 200
 
 
-def test_retrieval_finds_matching_chunks() -> None:
+def test_retrieval_reports_not_ready_without_a_database() -> None:
+    """Degraded, not dead: /readyz stops traffic, /healthz keeps the container."""
     with TestClient(retrieval_app) as client:
-        resp = client.post(
-            "/retrieve",
-            json={"tenant_id": "acme", "query": "termination notice written", "k": 24},
-        )
-        body = resp.json()
-        assert body["chunks"], "expected a hit for an in-corpus query"
-        assert body["reranked_to"] == len(body["chunks"])
+        assert client.get("/healthz").status_code == 200
+        assert client.get("/readyz").status_code == 503
 
 
 def test_generation_emits_an_uncited_claim() -> None:
@@ -188,9 +183,9 @@ def test_uncalibrated_scaffold_never_claims_a_bound() -> None:
 
 def test_unknown_fields_are_rejected() -> None:
     """A silently ignored field is how two services drift apart while both look fine."""
-    with TestClient(retrieval_app) as client:
+    with TestClient(verifier_app) as client:
         resp = client.post(
-            "/retrieve",
-            json={"tenant_id": "acme", "query": "x", "k": 8, "temperature": 0.7},
+            "/verify",
+            json={"tenant_id": "acme", "claims": [], "chunks": [], "temperature": 0.7},
         )
         assert resp.status_code == 422

@@ -18,9 +18,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Response
 
 from aletheia.db import get_db
+from aletheia.embedding import get_embedder
 from aletheia.ingestion import jobs
 from aletheia.ingestion.consumer import Consumer
-from aletheia.ingestion.embedding import get_embedder
 from aletheia.ingestion.messages import (
     DocumentList,
     DocumentSummary,

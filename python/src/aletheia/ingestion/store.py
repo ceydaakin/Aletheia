@@ -21,8 +21,8 @@ from enum import StrEnum
 from psycopg import AsyncConnection
 
 from aletheia.db import latest_version
+from aletheia.embedding import Embedder, NullEmbedder
 from aletheia.ingestion.chunking import ChunkConfig, chunk_text
-from aletheia.ingestion.embedding import Embedder, NullEmbedder
 
 log = logging.getLogger("ingestion.store")
 

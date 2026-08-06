@@ -53,6 +53,14 @@ testdb: ## Create and migrate the scratch database the db-marked tests use
 ingest: ## Load a corpus: make ingest DIR=../corpora/demo TENANT=demo LANG=en
 	cd python && $(PY) -m aletheia.ingestion.cli load $(DIR) --tenant $(TENANT) --lang $(LANG)
 
+.PHONY: backfill
+backfill: ## Embed chunks stored without vectors: make backfill TENANT=demo
+	cd python && $(PY) -m aletheia.ingestion.backfill --tenant $(TENANT)
+
+.PHONY: eval-retrieval
+eval-retrieval: ## Measure retrieval: make eval-retrieval DATASET=../eval/datasets/bootstrap-tr
+	cd python && $(PY) -m aletheia.eval.retrieval --dataset $(DATASET) --ingest
+
 # --- Build / test --------------------------------------------------------
 
 .PHONY: test
