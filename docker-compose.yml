@@ -96,12 +96,21 @@ services:
 
   ingestion:
     <<: *python
-    command: ["python", "-m", "aletheia.ingestion.worker"]
+    command: ["uvicorn", "aletheia.ingestion.app:app", "--host", "0.0.0.0", "--port", "8005"]
+    environment:
+      PORT: 8005
+    ports:
+      - "8005:8005"
+    volumes:
+      # Corpus files referenced by source_uri must be visible to the worker, not
+      # just to whoever submitted them.
+      - ./corpora:/corpora:ro
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_started
+    healthcheck: *py-health
 
   gateway:
     build:

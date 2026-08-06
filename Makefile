@@ -33,9 +33,25 @@ logs: ## Tail logs from all services
 	$(COMPOSE) logs -f
 
 .PHONY: migrate
-migrate: ## Apply SQL migrations against $$DATABASE_URL
-	$(COMPOSE) exec -T postgres psql -v ON_ERROR_STOP=1 -U aletheia -d aletheia \
-		-f /docker-entrypoint-initdb.d/0001_init.sql
+migrate: ## Apply every SQL migration, in order, to the running postgres
+	@for f in db/migrations/*.sql; do \
+		echo "applying $$f"; \
+		$(COMPOSE) exec -T postgres psql -q -v ON_ERROR_STOP=1 -U aletheia -d aletheia \
+			-f "/docker-entrypoint-initdb.d/$$(basename $$f)" || exit 1; \
+	done
+
+.PHONY: testdb
+testdb: ## Create and migrate the scratch database the db-marked tests use
+	-$(COMPOSE) exec -T postgres psql -U aletheia -c "CREATE DATABASE aletheia_test OWNER aletheia"
+	@for f in db/migrations/*.sql; do \
+		$(COMPOSE) exec -T postgres psql -q -v ON_ERROR_STOP=1 -U aletheia -d aletheia_test \
+			-f "/docker-entrypoint-initdb.d/$$(basename $$f)" || exit 1; \
+	done
+	@echo 'ready: export ALETHEIA_TEST_DATABASE_URL=postgresql://aletheia:aletheia@localhost:5432/aletheia_test'
+
+.PHONY: ingest
+ingest: ## Load a corpus: make ingest DIR=../corpora/demo TENANT=demo LANG=en
+	cd python && $(PY) -m aletheia.ingestion.cli load $(DIR) --tenant $(TENANT) --lang $(LANG)
 
 # --- Build / test --------------------------------------------------------
 

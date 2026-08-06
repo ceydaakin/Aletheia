@@ -17,11 +17,11 @@ P(unsupported claim) <= 0.05, with 95% confidence — calibration_id=cal_2026_07
 …and, when the evidence is too thin to honour it, an `abstain` with a reason code and
 the three best sources instead of a fluent guess.
 
-**Status: week 1 of 12 — scaffold.** The topology, contracts, and deployment story are
-real and running end to end; the retrieval, generation, verification, and calibration
-internals are stubs returning well-formed placeholder data. See
-[docs/PRD.md](docs/PRD.md) for the full product spec (Turkish) and
-[docs/adr/](docs/adr/) for the architecture decisions.
+**Status: week 2 of 12.** Ingestion and the bitemporal chunk store are real — documents
+are parsed, chunked with exact character spans, versioned, and queryable at any point in
+history. Retrieval, generation, verification, and calibration are still stubs returning
+well-formed placeholder data. See [docs/PRD.md](docs/PRD.md) for the full product spec
+(Turkish) and [docs/adr/](docs/adr/) for the architecture decisions.
 
 ---
 
@@ -76,6 +76,40 @@ curl -N localhost:8080/v1/answer \
   -d '{"query":"...","stream":true}'
 ```
 
+## Loading documents
+
+Synchronously, straight to Postgres — the path for corpus loads and eval runs:
+
+```bash
+cd python
+python -m aletheia.ingestion.cli load ../corpora/demo --tenant demo --lang en
+python -m aletheia.ingestion.cli list --tenant demo
+```
+
+Or asynchronously through the queue, which is what the API uses:
+
+```bash
+curl -s localhost:8005/ingest -H 'Content-Type: application/json' -d '{
+  "tenant_id":"demo","doc_id":"policy.pdf","filename":"policy.pdf",
+  "source_uri":"file:///corpora/demo/policy.pdf","valid_from":"2024-01-01T00:00:00Z"}'
+curl -s localhost:8005/jobs/<job_id>
+```
+
+Documents are **versioned bitemporally** (ADR-0002, ADR-0005). Re-ingesting identical
+text is a no-op — a nightly sync must not look like corpus drift. Amending a document
+closes the previous version's validity interval rather than overwriting it, so the same
+query answers differently depending on when you ask about:
+
+```sql
+SELECT text FROM chunks_as_of('demo', '2024-03-01');  -- what was in force then
+SELECT text FROM chunks_as_of('demo', now());         -- what is in force now
+```
+
+Correcting a mistake is a *different* operation from recording an amendment
+(`--correction`): it retracts the old rows instead of giving them a period in which they
+applied. Getting that distinction wrong erases history, which is why the caller has to
+state which one they mean.
+
 ## Repository layout
 
 | Path | What lives there |
@@ -86,7 +120,7 @@ curl -N localhost:8080/v1/answer \
 | `python/src/aletheia/generation/` | Prompt construction and citation-constrained decoding. |
 | `python/src/aletheia/verifier/` | Claim decomposition + NLI entailment scoring. |
 | `python/src/aletheia/risk/` | Calibration and runtime threshold decisions — *the heart of the project*. |
-| `python/src/aletheia/ingestion/` | NATS worker: parse → chunk → embed → version. |
+| `python/src/aletheia/ingestion/` | Parse → chunk → embed → version, over NATS or the CLI. |
 | `db/migrations/` | SQL migrations. The bitemporal chunk store lives here. |
 | `eval/` | Datasets, harness, and result tables. |
 | `docs/` | PRD and ADRs. |
@@ -99,6 +133,7 @@ make help          # list targets
 make up            # docker compose up --build
 make test          # go test ./... + pytest
 make fmt lint      # gofmt + ruff
+make testdb        # create the scratch database the store tests need
 ```
 
 Running a Python service outside Docker:
@@ -111,12 +146,24 @@ pip install -e ".[dev]"
 uvicorn aletheia.retrieval.app:app --port 8001 --reload
 ```
 
+The bitemporal store's guarantees are database constraints, so those tests need a real
+Postgres and skip without one:
+
+```bash
+make testdb
+export ALETHEIA_TEST_DATABASE_URL=postgresql://aletheia:aletheia@localhost:5432/aletheia_test
+cd python && pytest
+```
+
+Point that at a **scratch** database — the fixture truncates every table between tests,
+including `tenants`.
+
 ## Roadmap
 
 | Week | Milestone |
 |---|---|
-| 1 | **Scope lock, corpora, repo skeleton — you are here** |
-| 2 | Ingestion + bitemporal chunk store |
+| 1 | Scope lock, corpora, repo skeleton |
+| 2 | **Ingestion + bitemporal chunk store — you are here** |
 | 3 | Hybrid retrieval + reranker |
 | 4 | EN eval set v1 (400 verified QA triples) |
 | 5 | Cited generation + claim decomposer |

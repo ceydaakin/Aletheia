@@ -16,7 +16,23 @@ class Settings(BaseSettings):
     nats_url: str = "nats://nats:4222"
     nats_ingest_stream: str = "aletheia-ingest"
 
-    # Models. Unused by the scaffold; wired up from week 3 onwards.
+    # Ingestion.
+    ingest_subject: str = "ingest.document"
+    ingest_durable: str = "aletheia-ingest-worker"
+    # A document that keeps failing is a poison message. Past this many
+    # redeliveries it is marked failed and dropped, because one unparseable PDF
+    # must not block the rest of the corpus.
+    ingest_max_attempts: int = 3
+    chunk_target_chars: int = 1200
+    chunk_overlap_chars: int = 150
+    chunk_min_chars: int = 120
+
+    # Embedding backend: "null" stores no vectors and leaves chunks lexically
+    # retrievable; "sentence-transformers" needs the `models` extra. Week 3
+    # backfills the NULLs, so this is a config flip rather than a code change.
+    embedding_backend: str = "null"
+
+    # Models. Mostly unused by the scaffold; wired up from week 3 onwards.
     embedding_model: str = "intfloat/multilingual-e5-base"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     nli_model: str = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"

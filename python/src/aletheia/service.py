@@ -12,6 +12,7 @@ import logging
 import sys
 import time
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from fastapi import FastAPI, Request, Response
 
@@ -65,12 +66,26 @@ def deadline_ms(request: Request) -> int | None:
         return None
 
 
-def create_app(name: str, *, ready: Callable[[], bool] | None = None) -> FastAPI:
+def create_app(
+    name: str,
+    *,
+    ready: Callable[[], bool] | None = None,
+    lifespan: Any = None,
+) -> FastAPI:
+    """Build a service app.
+
+    Args:
+        ready: readiness predicate. Returning False makes /readyz 503 without
+            affecting /healthz, so a late dependency stops traffic without
+            getting the process restart-looped.
+        lifespan: async context manager for startup/shutdown work — pools,
+            consumers, model loading.
+    """
     settings = get_settings()
     configure_logging(settings.log_level)
     log = logging.getLogger(name)
 
-    app = FastAPI(title=f"aletheia-{name}", version="0.1.0", docs_url="/docs")
+    app = FastAPI(title=f"aletheia-{name}", version="0.1.0", docs_url="/docs", lifespan=lifespan)
     app.state.service_name = name
 
     @app.middleware("http")

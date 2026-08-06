@@ -19,9 +19,16 @@ CREATE EXTENSION IF NOT EXISTS unaccent;
 -- Sentinel for "still in force". A NULL upper bound would force every temporal
 -- predicate to spell out IS NULL, and one forgotten branch silently returns a
 -- stale chunk.
+--
+-- Deliberately NOT 'infinity', which is the semantically obvious choice: Python's
+-- datetime cannot represent it, so psycopg raises DataError on any SELECT that
+-- returns the column. Round-tripping matters more here than elegance, and
+-- datetime.max maps to this value exactly. Every open interval in the schema uses
+-- this function, so there is one definition to change if that ever stops being
+-- true.
 CREATE OR REPLACE FUNCTION forever() RETURNS timestamptz
     LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
-$$ SELECT 'infinity'::timestamptz $$;
+$$ SELECT '9999-12-31 23:59:59.999999+00'::timestamptz $$;
 
 -- ---------------------------------------------------------------------------
 -- Tenants
@@ -66,7 +73,11 @@ CREATE TABLE documents (
 );
 
 CREATE TABLE chunks (
-    chunk_id    text PRIMARY KEY,
+    -- Unique per tenant, not globally: two tenants may legitimately hold a
+    -- document with the same id, and a global unique constraint would make one
+    -- tenant's ingestion fail because of another's. Citations are always resolved
+    -- inside a tenant context, so they stay readable.
+    chunk_id    text NOT NULL,
     tenant_id   text NOT NULL REFERENCES tenants(tenant_id) ON DELETE RESTRICT,
     doc_id      text NOT NULL,
     version     integer NOT NULL,
@@ -93,6 +104,7 @@ CREATE TABLE chunks (
     -- 'simple' is the honest placeholder until Turkish analysis is benchmarked.
     tsv         tsvector GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED,
 
+    PRIMARY KEY (tenant_id, chunk_id),
     FOREIGN KEY (tenant_id, doc_id, version)
         REFERENCES documents(tenant_id, doc_id, version) ON DELETE RESTRICT,
     CHECK (valid_from < valid_to),

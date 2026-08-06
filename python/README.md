@@ -14,11 +14,24 @@ uvicorn aletheia.retrieval.app:app  --port 8001 --reload
 uvicorn aletheia.generation.app:app --port 8002 --reload
 uvicorn aletheia.verifier.app:app   --port 8003 --reload
 uvicorn aletheia.risk.app:app       --port 8004 --reload
-python -m aletheia.ingestion.worker
+uvicorn aletheia.ingestion.app:app  --port 8005 --reload
 ```
 
-Extras: `db` (psycopg + pgvector), `models` (torch, transformers), `ingest`
-(NATS, parsers). None are needed to run or test the scaffold.
+Only `models` (torch, transformers, sentence-transformers) is an extra; storage and
+document parsers are core dependencies, because by week 7 every service needs them and
+they are small.
+
+Loading documents without the queue:
+
+```bash
+python -m aletheia.ingestion.cli load ../corpora/demo --tenant demo --lang en
+python -m aletheia.ingestion.cli list --tenant demo
+```
+
+Store tests need Postgres and skip without `ALETHEIA_TEST_DATABASE_URL`; see the root
+README. On Windows, `aletheia.db.configure_event_loop()` must run before any loop is
+created — psycopg's async mode cannot use the default ProactorEventLoop. The CLI and
+the test suite both call it; a new entrypoint must too.
 
 ## Rules that outlive the stubs
 
@@ -29,3 +42,7 @@ Extras: `db` (psycopg + pgvector), `models` (torch, transformers), `ingest`
 - A claim with no citation is unsupported, whatever it says.
 - No response quotes a bound it did not earn — see the `UNCALIBRATED SCAFFOLD`
   guarantee string the risk service currently returns.
+- A chunk's span must reproduce its own text: `chunk.text == source[start:end]`.
+  A citation that does not point at what it claims to is worse than no citation.
+- Nothing in the corpus is ever deleted or overwritten. Amendments close a validity
+  interval; corrections retract knowledge. Both keep the old rows.

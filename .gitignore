@@ -23,7 +23,8 @@ build/
 
 # --- Data / models / caches ---
 data/
-corpora/
+corpora/*
+!corpora/README.md
 models/
 .cache/
 eval/runs/

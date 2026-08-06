@@ -1,2 +1,15 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalise to LF in the repository *and* in the working tree, on every platform.
+#
+# Plain `text=auto` checks out CRLF on Windows, which makes `gofmt -l` flag every
+# file locally while CI (Linux, LF) sees nothing wrong — a difference that costs
+# more than it saves. Shell scripts and Makefiles also break outright with CRLF
+# once they reach a container.
+* text=auto eol=lf
+
+# Binary corpus material must never be touched.
+*.pdf  binary
+*.docx binary
+*.png  binary
+*.jpg  binary
+*.gz   binary
+*.zip  binary

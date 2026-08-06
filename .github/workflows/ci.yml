@@ -39,6 +39,26 @@ jobs:
   services:
     name: Services (Python)
     runs-on: ubuntu-latest
+
+    # The bitemporal store's guarantees are enforced by database constraints, so
+    # testing it against a real Postgres is the only way to test it at all.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: aletheia
+          POSTGRES_PASSWORD: aletheia
+          POSTGRES_DB: aletheia_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aletheia -d aletheia_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      ALETHEIA_TEST_DATABASE_URL: postgresql://aletheia:aletheia@localhost:5432/aletheia_test
+      PGPASSWORD: aletheia
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,6 +66,12 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: python/pyproject.toml
+      - name: Apply migrations
+        run: |
+          for f in db/migrations/*.sql; do
+            echo "applying $f"
+            psql -h localhost -U aletheia -d aletheia_test -v ON_ERROR_STOP=1 -q -f "$f"
+          done
       - name: Install
         working-directory: python
         run: pip install -e ".[dev]"
@@ -55,6 +81,9 @@ jobs:
       - name: Test
         working-directory: python
         run: pytest
+      - name: Fail if the database tests silently skipped
+        working-directory: python
+        run: pytest -m db --collect-only -q | grep -q "test_" || exit 1
 
   # Both jobs above parse the same golden fixtures in testdata/contracts/, which
   # is how the Go and Python halves of the contract are kept in sync without a
@@ -89,6 +118,35 @@ jobs:
             -H 'Authorization: Bearer wrong' -H 'Content-Type: application/json' \
             -d '{"query":"x"}')
           [ "$code" = "401" ] || { echo "::error::expected 401, got $code"; exit 1; }
+
+      - name: Ingestion round-trips a document through NATS
+        run: |
+          mkdir -p corpora/ci
+          printf 'Notice Period\n\nEither party may terminate on thirty days written notice.\n' \
+            > corpora/ci/notice.txt
+          job=$(curl -sf localhost:8005/ingest -H 'Content-Type: application/json' -d '{
+            "tenant_id":"demo","doc_id":"ci/notice.txt","filename":"notice.txt",
+            "source_uri":"file:///corpora/ci/notice.txt"}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])')
+          for _ in $(seq 30); do
+            status=$(curl -sf "localhost:8005/jobs/$job" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+            case "$status" in
+              succeeded) echo "ingested"; exit 0 ;;
+              failed) curl -s "localhost:8005/jobs/$job"; echo "::error::ingest failed"; exit 1 ;;
+            esac
+            sleep 2
+          done
+          echo "::error::ingest did not finish"; exit 1
+
+      - name: Re-ingesting the same document is a no-op
+        run: |
+          job=$(curl -sf localhost:8005/ingest -H 'Content-Type: application/json' -d '{
+            "tenant_id":"demo","doc_id":"ci/notice.txt","filename":"notice.txt",
+            "source_uri":"file:///corpora/ci/notice.txt"}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])')
+          sleep 5
+          status=$(curl -sf "localhost:8005/jobs/$job" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+          [ "$status" = "unchanged" ] || { echo "::error::expected unchanged, got $status"; exit 1; }
       - name: Logs on failure
         if: failure()
         run: docker compose logs --no-color
