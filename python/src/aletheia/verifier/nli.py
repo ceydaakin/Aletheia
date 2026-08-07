@@ -86,10 +86,21 @@ class NLIScorer:
 
     name = "nli"
 
-    def __init__(self, model_name: str, *, batch_size: int = 16, max_length: int = 512) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        *,
+        batch_size: int = 16,
+        max_length: int = 512,
+        quantize: bool = False,
+    ) -> None:
         self.model_name = model_name
         self.batch_size = batch_size
+        # Premises are single cited chunks, which are ~1200 characters by the
+        # chunking config — well under 512 tokens. Lowering this is the cheapest
+        # latency lever available, because attention cost is quadratic in length.
         self.max_length = max_length
+        self.quantize = quantize
         self._pipeline = None
         self._entail_index: int | None = None
 
@@ -103,6 +114,9 @@ class NLIScorer:
             model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
             model.eval()
 
+            if self.quantize:
+                model = self._try_quantize(model, tokenizer, torch)
+
             # Label order differs between NLI checkpoints; reading it from the
             # config beats assuming index 0 and silently scoring contradiction as
             # support.
@@ -115,6 +129,35 @@ class NLIScorer:
             self._entail_index = labels["entailment"]
             self._pipeline = (tokenizer, model, torch)
         return self._pipeline
+
+    def _try_quantize(self, model, tokenizer, torch):
+        """int8 dynamic quantization, validated before it is trusted.
+
+        Roughly halves CPU inference time on architectures where it works. It does
+        not work everywhere: DeBERTa-v2 on torch 2.13 + ONEDNN raises
+        "data type of input should be float" — at *inference* time, not at
+        quantization time, so quantizing and hoping would turn every verification
+        request into a 500.
+
+        A test forward pass settles it at startup. Falling back is safe in the one
+        direction that matters: unquantized is the more accurate model, so the
+        cost of this failing is latency, never a wrong support score.
+        """
+        try:
+            quantized = torch.quantization.quantize_dynamic(
+                model, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            probe = tokenizer(["a"], ["b"], return_tensors="pt", truncation=True)
+            with torch.no_grad():
+                quantized(**probe)
+        except Exception as exc:
+            log.warning(
+                "int8 quantization unavailable; continuing at full precision",
+                extra={"extra_fields": {"model": self.model_name, "error": str(exc)}},
+            )
+            return model
+        log.info("NLI model quantized to int8")
+        return quantized
 
     def score(self, pairs: list[tuple[str, str]]) -> list[float]:
         if not pairs:
@@ -145,5 +188,10 @@ def get_scorer(settings: Settings) -> Scorer:
     if backend in ("overlap", "null", ""):
         return OverlapScorer()
     if backend in ("nli", "entailment"):
-        return NLIScorer(settings.nli_model, batch_size=settings.verifier_batch_size)
+        return NLIScorer(
+            settings.nli_model,
+            batch_size=settings.verifier_batch_size,
+            max_length=settings.verifier_max_length,
+            quantize=settings.verifier_quantize,
+        )
     raise ValueError(f"unknown VERIFIER_BACKEND {settings.verifier_backend!r}")

@@ -110,41 +110,47 @@ async def retrieve(req: RetrieveRequest) -> RetrieveResponse:
     known_at = None
     k = req.k or settings.retrieval_lexical_k
 
+    # The language lookup gets its own short-lived connection, released before the
+    # arms fan out. Holding it across the fan-out means every request occupies one
+    # connection *plus* one per arm, so at concurrency 20 the requests starve each
+    # other on the pool and retrieval times out — which the gateway then turns into
+    # abstain(out_of_corpus). Measured: every request timing out at the 1.2 s stage
+    # budget under a 20-way load test.
     async with get_db().connection() as conn:
         langs = unique_langs(req.lang, await tenant_languages(conn, req.tenant_id))
 
-        # One lexical arm per language configuration, plus dense. A tenant holding
-        # both Turkish and English documents would otherwise have one of the two
-        # stemmed with the wrong rules.
-        async def lexical(lang: str):
-            arm_started = time.perf_counter()
-            async with get_db().connection() as arm_conn:
-                results = await lexical_search(
-                    arm_conn, req.tenant_id, req.query,
-                    k=k, valid_at=valid_at, known_at=known_at, lang=lang,
-                )
-            _record(f"lexical:{lang or 'default'}", results, arm_started)
-            return f"lexical:{lang or 'default'}", results
+    # One lexical arm per language configuration, plus dense. A tenant holding
+    # both Turkish and English documents would otherwise have one of the two
+    # stemmed with the wrong rules.
+    async def lexical(lang: str):
+        arm_started = time.perf_counter()
+        async with get_db().connection() as arm_conn:
+            results = await lexical_search(
+                arm_conn, req.tenant_id, req.query,
+                k=k, valid_at=valid_at, known_at=known_at, lang=lang,
+            )
+        _record(f"lexical:{lang or 'default'}", results, arm_started)
+        return f"lexical:{lang or 'default'}", results
 
-        async def dense():
-            embedder = app.state.embedder
-            if isinstance(embedder, NullEmbedder):
-                return "dense", []
-            arm_started = time.perf_counter()
-            vectors = embedder.embed([req.query])
-            if not vectors or vectors[0] is None:
-                return "dense", []
-            async with get_db().connection() as arm_conn:
-                results = await dense_search(
-                    arm_conn, req.tenant_id, vectors[0],
-                    k=settings.retrieval_dense_k, valid_at=valid_at, known_at=known_at,
-                )
-            _record("dense", results, arm_started)
-            return "dense", results
+    async def dense():
+        embedder = app.state.embedder
+        if isinstance(embedder, NullEmbedder):
+            return "dense", []
+        arm_started = time.perf_counter()
+        vectors = embedder.embed([req.query])
+        if not vectors or vectors[0] is None:
+            return "dense", []
+        async with get_db().connection() as arm_conn:
+            results = await dense_search(
+                arm_conn, req.tenant_id, vectors[0],
+                k=settings.retrieval_dense_k, valid_at=valid_at, known_at=known_at,
+            )
+        _record("dense", results, arm_started)
+        return "dense", results
 
-        outcomes = await asyncio.gather(
-            *(lexical(lang) for lang in langs), dense(), return_exceptions=True
-        )
+    outcomes = await asyncio.gather(
+        *(lexical(lang) for lang in langs), dense(), return_exceptions=True
+    )
 
     arms = {}
     for outcome in outcomes:

@@ -103,3 +103,8 @@ lint: ## Lint Go and Python sources
 .PHONY: eval
 eval: ## Run the evaluation harness (seeded, cached)
 	cd eval && $(PY) -m aletheia_eval.run --config configs/default.yaml
+
+.PHONY: loadtest
+loadtest: ## Measure end-to-end latency: make loadtest C=20 N=400
+	@echo "note: raise GATEWAY_RATE_LIMIT_PER_SECOND above the offered rate first"
+	cd gateway && go run ./cmd/loadtest -c $(or $(C),20) -n $(or $(N),400)

@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ceydaakin/aletheia/gateway/internal/contract"
 	"github.com/ceydaakin/aletheia/gateway/internal/obs"
 	"github.com/ceydaakin/aletheia/gateway/internal/pipeline"
+	"github.com/ceydaakin/aletheia/gateway/internal/ratelimit"
 	"github.com/ceydaakin/aletheia/gateway/internal/tenant"
 )
 
@@ -25,6 +28,15 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusUnauthorized, "unauthorized", "missing or invalid bearer token")
 		return
 	}
+
+	// Admission control happens after auth (so an unauthenticated flood cannot
+	// consume a real tenant's budget) and before any upstream work.
+	outcome, release := s.limiter.Acquire(tnt.ID)
+	if outcome != ratelimit.Allowed {
+		s.writeThrottled(w, r, tnt.ID, outcome)
+		return
+	}
+	defer release()
 
 	req, err := decodeRequest(r, s.cfg.MaxBodyBytes)
 	if err != nil {
@@ -158,6 +170,27 @@ func pipelineErrorCode(err error) string {
 	default:
 		return "internal_error"
 	}
+}
+
+// writeThrottled reports the two admission failures distinctly. Both are 429,
+// but a client that is sending too fast and one that is holding too many open
+// connections need different fixes, and a single opaque status tells them
+// nothing about which they are doing.
+func (s *Server) writeThrottled(
+	w http.ResponseWriter, r *http.Request, tenantID string, outcome ratelimit.Outcome,
+) {
+	code, message := "rate_limited", "request rate exceeded for this tenant"
+	if outcome == ratelimit.ConcurrencyLimited {
+		code = "too_many_concurrent_requests"
+		message = "too many requests in flight for this tenant"
+	} else if after := s.limiter.RetryAfter(tenantID); after > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(after.Seconds()))))
+	}
+
+	s.metrics.Inc(obs.MetricThrottled, "reason", code)
+	obs.LoggerFor(r.Context(), s.log).Warn("request throttled",
+		"tenant_id", tenantID, "reason", code)
+	writeError(w, r, http.StatusTooManyRequests, code, message)
 }
 
 func (s *Server) recordDecision(resp contract.AnswerResponse) {

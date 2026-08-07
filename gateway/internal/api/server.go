@@ -12,6 +12,7 @@ import (
 	"github.com/ceydaakin/aletheia/gateway/internal/contract"
 	"github.com/ceydaakin/aletheia/gateway/internal/obs"
 	"github.com/ceydaakin/aletheia/gateway/internal/pipeline"
+	"github.com/ceydaakin/aletheia/gateway/internal/ratelimit"
 	"github.com/ceydaakin/aletheia/gateway/internal/tenant"
 	"github.com/ceydaakin/aletheia/gateway/internal/upstream"
 )
@@ -22,6 +23,7 @@ type Server struct {
 	pipeline *pipeline.Pipeline
 	log      *slog.Logger
 	metrics  *obs.Metrics
+	limiter  *ratelimit.Limiter
 	// upstreams is used only by the readiness probe.
 	upstreams []*upstream.Client
 }
@@ -34,7 +36,15 @@ func NewServer(
 	m *obs.Metrics,
 	upstreams []*upstream.Client,
 ) *Server {
-	return &Server{cfg: cfg, tenants: tenants, pipeline: p, log: log, metrics: m, upstreams: upstreams}
+	return &Server{
+		cfg: cfg, tenants: tenants, pipeline: p, log: log, metrics: m,
+		upstreams: upstreams,
+		limiter: ratelimit.New(ratelimit.Limits{
+			RequestsPerSecond: cfg.RateLimitPerSecond,
+			Burst:             cfg.RateLimitBurst,
+			MaxConcurrent:     cfg.MaxConcurrentPerTenant,
+		}),
+	}
 }
 
 func (s *Server) Handler() http.Handler {

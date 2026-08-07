@@ -124,6 +124,13 @@ services:
       GENERATION_URL: http://generation:8002
       VERIFIER_URL: http://verifier:8003
       RISK_URL: http://risk:8004
+      # Per-tenant admission control. Overridable from the shell so a load test
+      # can raise the ceiling above the rate it offers — measuring latency while
+      # most of the load is being rejected describes the reject path, not the
+      # pipeline.
+      GATEWAY_RATE_LIMIT_PER_SECOND: ${GATEWAY_RATE_LIMIT_PER_SECOND:-10}
+      GATEWAY_RATE_LIMIT_BURST: ${GATEWAY_RATE_LIMIT_BURST:-20}
+      GATEWAY_MAX_CONCURRENT_PER_TENANT: ${GATEWAY_MAX_CONCURRENT_PER_TENANT:-20}
     ports:
       - "8080:8080"
     depends_on:

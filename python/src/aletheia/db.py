@@ -41,7 +41,14 @@ def configure_event_loop() -> None:
 
 
 class Database:
-    def __init__(self, url: str, *, min_size: int = 1, max_size: int = 10) -> None:
+    def __init__(self, url: str, *, min_size: int = 2, max_size: int = 32) -> None:
+        """
+        max_size is sized for fan-out, not for request count. Retrieval runs one
+        arm per corpus language plus a dense arm concurrently, so a single request
+        can hold several connections at once; a pool sized for the request rate
+        alone starves under concurrency and surfaces as stage timeouts rather than
+        as pool errors.
+        """
         self._pool = AsyncConnectionPool(
             url,
             min_size=min_size,

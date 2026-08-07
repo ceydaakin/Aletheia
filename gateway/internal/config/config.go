@@ -38,17 +38,31 @@ type Config struct {
 	RetrievalK int
 
 	MaxBodyBytes int64
+
+	// Per-tenant admission control. Without it one tenant's batch job consumes
+	// the verifier's throughput and every other tenant's requests time out —
+	// and a timed-out verifier becomes an abstention, so the noisy neighbour
+	// silently degrades other tenants' answers rather than just slowing them.
+	RateLimitPerSecond     float64
+	RateLimitBurst         int
+	MaxConcurrentPerTenant int
 }
 
 func Load() (*Config, error) {
 	c := &Config{
-		Addr:              env("GATEWAY_ADDR", ":8080"),
-		LogLevel:          env("GATEWAY_LOG_LEVEL", "info"),
-		RequestTimeout:    envDuration("GATEWAY_REQUEST_TIMEOUT_MS", 6000),
-		TenantSpec:        env("ALETHEIA_TENANTS", "demo:demo-key-change-me:0.05"),
-		DefaultRiskBudget: envFloat("DEFAULT_RISK_BUDGET", 0.05),
-		RetrievalK:        envInt("GATEWAY_RETRIEVAL_K", 24),
-		MaxBodyBytes:      int64(envInt("GATEWAY_MAX_BODY_BYTES", 64<<10)),
+		Addr:               env("GATEWAY_ADDR", ":8080"),
+		LogLevel:           env("GATEWAY_LOG_LEVEL", "info"),
+		RequestTimeout:     envDuration("GATEWAY_REQUEST_TIMEOUT_MS", 6000),
+		TenantSpec:         env("ALETHEIA_TENANTS", "demo:demo-key-change-me:0.05"),
+		DefaultRiskBudget:  envFloat("DEFAULT_RISK_BUDGET", 0.05),
+		RetrievalK:         envInt("GATEWAY_RETRIEVAL_K", 24),
+		MaxBodyBytes:       int64(envInt("GATEWAY_MAX_BODY_BYTES", 64<<10)),
+		RateLimitPerSecond: envFloat("GATEWAY_RATE_LIMIT_PER_SECOND", 10),
+		RateLimitBurst:     envInt("GATEWAY_RATE_LIMIT_BURST", 20),
+		// Defaults to the NFR throughput target: >= 20 concurrent requests on one
+		// node (PRD §4.2). Per tenant, so the total is higher with many tenants —
+		// this bounds the blast radius of one, not the node.
+		MaxConcurrentPerTenant: envInt("GATEWAY_MAX_CONCURRENT_PER_TENANT", 20),
 		Retrieval: Upstream{
 			Name:    "retrieval",
 			URL:     env("RETRIEVAL_URL", "http://retrieval:8001"),

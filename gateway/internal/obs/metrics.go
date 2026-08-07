@@ -157,6 +157,7 @@ const (
 	MetricDecisions     = "aletheia_gateway_decisions_total"
 	MetricAbstentions   = "aletheia_gateway_abstentions_total"
 	MetricStageErrors   = "aletheia_gateway_stage_errors_total"
+	MetricThrottled     = "aletheia_gateway_throttled_total"
 	MetricRequestLatncy = "aletheia_gateway_request_duration_seconds"
 	MetricStageLatency  = "aletheia_gateway_stage_duration_seconds"
 )

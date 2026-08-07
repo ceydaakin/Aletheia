@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     # scores P(entailment) with a multilingual model and needs the `models` extra.
     verifier_backend: str = "overlap"
     verifier_batch_size: int = 16
+    # int8 dynamic quantization. Roughly halves CPU inference time; the accuracy
+    # cost must be re-measured, because the guarantee rests on this model telling
+    # a claim from its contradiction.
+    verifier_quantize: bool = False
+    # Premises are single cited chunks (~1200 chars), so 256 tokens covers them
+    # and attention cost is quadratic in this number.
+    verifier_max_length: int = 256
     # A claim scoring at or above this is treated as supported. This is *not* the
     # risk threshold — that one is calibrated (ADR-0004). This only decides the
     # per-claim label the action policy acts on.

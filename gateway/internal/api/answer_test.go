@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,6 +56,11 @@ func newTestServer(t *testing.T, s stubs) http.Handler {
 		RetrievalK:        24,
 		MaxBodyBytes:      64 << 10,
 		DefaultRiskBudget: 0.05,
+		// Effectively unlimited: these tests are about the pipeline, and a zero
+		// value here is an empty token bucket that rejects everything.
+		RateLimitPerSecond:     1e6,
+		RateLimitBurst:         1e6,
+		MaxConcurrentPerTenant: 0,
 	}
 	stage := 2 * time.Second
 	retrieval := upstream.New("retrieval", mk(s.retrieval), stage)
@@ -374,4 +380,137 @@ func TestBodySizeLimit(t *testing.T) {
 	if code := post(t, h, huge, testKey).Code; code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 for an oversized body", code)
 	}
+}
+
+// --- Admission control ------------------------------------------------------
+
+// newLimitedServer builds a server with a real, tight budget so the throttling
+// paths can be exercised.
+func newLimitedServer(t *testing.T, limits config.Config) http.Handler {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {})
+	mux.Handle("/", jsonHandler(contract.RetrieveResponse{}))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	cfg := limits
+	cfg.RequestTimeout = 3 * time.Second
+	cfg.RetrievalK = 24
+	cfg.MaxBodyBytes = 64 << 10
+
+	stage := 2 * time.Second
+	clients := []*upstream.Client{
+		upstream.New("retrieval", srv.URL, stage),
+		upstream.New("generation", srv.URL, stage),
+		upstream.New("verifier", srv.URL, stage),
+		upstream.New("risk", srv.URL, stage),
+	}
+	reg, err := tenant.NewRegistry("acme:" + testKey + ":0.05,beta:other-key:0.05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := obs.NewLogger("error")
+	metrics := obs.NewMetrics()
+	p := pipeline.New(clients[0], clients[1], clients[2], clients[3], cfg.RetrievalK, log, metrics)
+	return NewServer(&cfg, reg, p, log, metrics, clients).Handler()
+}
+
+func TestRateLimitReturns429WithRetryAfter(t *testing.T) {
+	h := newLimitedServer(t, config.Config{RateLimitPerSecond: 1, RateLimitBurst: 2})
+
+	for i := 0; i < 2; i++ {
+		if code := post(t, h, `{"query":"x"}`, testKey).Code; code == http.StatusTooManyRequests {
+			t.Fatalf("request %d was throttled inside the burst", i)
+		}
+	}
+
+	rec := post(t, h, `{"query":"x"}`, testKey)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("no Retry-After header; the client has nothing to back off by")
+	}
+	if !strings.Contains(rec.Body.String(), "rate_limited") {
+		t.Errorf("body does not name the reason: %s", rec.Body.String())
+	}
+}
+
+func TestOneTenantCannotExhaustAnother(t *testing.T) {
+	// The point of per-tenant admission control: a timed-out verifier becomes an
+	// abstention, so a noisy neighbour would silently degrade other tenants'
+	// answers, not merely slow them down.
+	h := newLimitedServer(t, config.Config{RateLimitPerSecond: 1, RateLimitBurst: 1})
+
+	post(t, h, `{"query":"x"}`, testKey)
+	if code := post(t, h, `{"query":"x"}`, testKey).Code; code != http.StatusTooManyRequests {
+		t.Fatalf("noisy tenant = %d, want 429", code)
+	}
+
+	if code := post(t, h, `{"query":"x"}`, "other-key").Code; code == http.StatusTooManyRequests {
+		t.Error("the second tenant was throttled by the first tenant's traffic")
+	}
+}
+
+func TestThrottlingHappensAfterAuthentication(t *testing.T) {
+	// Otherwise an unauthenticated flood consumes a real tenant's budget.
+	h := newLimitedServer(t, config.Config{RateLimitPerSecond: 1, RateLimitBurst: 1})
+
+	for i := 0; i < 5; i++ {
+		if code := post(t, h, `{"query":"x"}`, "not-a-key").Code; code != http.StatusUnauthorized {
+			t.Fatalf("unauthenticated request = %d, want 401", code)
+		}
+	}
+	if code := post(t, h, `{"query":"x"}`, testKey).Code; code == http.StatusTooManyRequests {
+		t.Error("an unauthenticated flood consumed the real tenant's budget")
+	}
+}
+
+func TestConcurrencyLimitIsReportedDistinctly(t *testing.T) {
+	// A client sending too fast and one holding too many connections open need
+	// different fixes, so a single opaque 429 is not enough.
+	h := newLimitedServer(t, config.Config{
+		RateLimitPerSecond: 1e6, RateLimitBurst: 1e6, MaxConcurrentPerTenant: 1,
+	})
+
+	release := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		req := httptest.NewRequest(http.MethodPost, "/v1/answer", &blockingBody{release: release})
+		req.Header.Set("Authorization", "Bearer "+testKey)
+		req.Header.Set("Content-Type", "application/json")
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+
+	// Wait for the in-flight request to have taken its slot.
+	time.Sleep(50 * time.Millisecond)
+	rec := post(t, h, `{"query":"x"}`, testKey)
+	close(release)
+	<-done
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "too_many_concurrent_requests") {
+		t.Errorf("reason is not distinguishable from a rate limit: %s", rec.Body.String())
+	}
+}
+
+// blockingBody holds a request open until released, so a concurrency slot stays
+// occupied for the duration of the test.
+type blockingBody struct {
+	release chan struct{}
+	done    bool
+}
+
+func (b *blockingBody) Read(p []byte) (int, error) {
+	if b.done {
+		return 0, io.EOF
+	}
+	<-b.release
+	b.done = true
+	return copy(p, `{"query":"x"}`), nil
 }
