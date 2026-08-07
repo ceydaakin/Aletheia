@@ -1,0 +1,713 @@
+{
+  "calibration_id": "cal_bootstrap-tr_3f9e75ca",
+  "alpha": 0.05,
+  "backends": {
+    "generation": "extractive",
+    "verifier": "nli",
+    "embedding": "null"
+  },
+  "calibration": [
+    {
+      "threshold": 0.02,
+      "n": 14.0,
+      "answer_rate": 0.0,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.04,
+      "n": 14.0,
+      "answer_rate": 0.07142857142857142,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.06,
+      "n": 14.0,
+      "answer_rate": 0.07142857142857142,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.08,
+      "n": 14.0,
+      "answer_rate": 0.07142857142857142,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.1,
+      "n": 14.0,
+      "answer_rate": 0.07142857142857142,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.12,
+      "n": 14.0,
+      "answer_rate": 0.07142857142857142,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.14,
+      "n": 14.0,
+      "answer_rate": 0.21428571428571427,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.16,
+      "n": 14.0,
+      "answer_rate": 0.21428571428571427,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.18,
+      "n": 14.0,
+      "answer_rate": 0.21428571428571427,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.2,
+      "n": 14.0,
+      "answer_rate": 0.35714285714285715,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.22,
+      "n": 14.0,
+      "answer_rate": 0.35714285714285715,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.24,
+      "n": 14.0,
+      "answer_rate": 0.42857142857142855,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.26,
+      "n": 14.0,
+      "answer_rate": 0.5,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.28,
+      "n": 14.0,
+      "answer_rate": 0.5,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.3,
+      "n": 14.0,
+      "answer_rate": 0.5,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.32,
+      "n": 14.0,
+      "answer_rate": 0.5,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.34,
+      "n": 14.0,
+      "answer_rate": 0.5,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.36,
+      "n": 14.0,
+      "answer_rate": 0.5,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.38,
+      "n": 14.0,
+      "answer_rate": 0.5714285714285714,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.4,
+      "n": 14.0,
+      "answer_rate": 0.5714285714285714,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.42,
+      "n": 14.0,
+      "answer_rate": 0.5714285714285714,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.44,
+      "n": 14.0,
+      "answer_rate": 0.6428571428571429,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.46,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.48,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.5,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.52,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.54,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.56,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.58,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.6,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.62,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.64,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.66,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.68,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.7,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.72,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.74,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.76,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.78,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.8,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.82,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.84,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.86,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.88,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.9,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.92,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.94,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.96,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.98,
+      "n": 14.0,
+      "answer_rate": 0.7142857142857143,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 1.0,
+      "n": 14.0,
+      "answer_rate": 1.0,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    }
+  ],
+  "test": [
+    {
+      "threshold": 0.02,
+      "n": 13.0,
+      "answer_rate": 0.0,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.04,
+      "n": 13.0,
+      "answer_rate": 0.07692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.06,
+      "n": 13.0,
+      "answer_rate": 0.07692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.08,
+      "n": 13.0,
+      "answer_rate": 0.07692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.1,
+      "n": 13.0,
+      "answer_rate": 0.15384615384615385,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.12,
+      "n": 13.0,
+      "answer_rate": 0.15384615384615385,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.14,
+      "n": 13.0,
+      "answer_rate": 0.15384615384615385,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.16,
+      "n": 13.0,
+      "answer_rate": 0.15384615384615385,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.18,
+      "n": 13.0,
+      "answer_rate": 0.15384615384615385,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.2,
+      "n": 13.0,
+      "answer_rate": 0.15384615384615385,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.22,
+      "n": 13.0,
+      "answer_rate": 0.23076923076923078,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.24,
+      "n": 13.0,
+      "answer_rate": 0.23076923076923078,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.26,
+      "n": 13.0,
+      "answer_rate": 0.3076923076923077,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.28,
+      "n": 13.0,
+      "answer_rate": 0.3076923076923077,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.3,
+      "n": 13.0,
+      "answer_rate": 0.3076923076923077,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.32,
+      "n": 13.0,
+      "answer_rate": 0.46153846153846156,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.34,
+      "n": 13.0,
+      "answer_rate": 0.46153846153846156,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.36,
+      "n": 13.0,
+      "answer_rate": 0.46153846153846156,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.38,
+      "n": 13.0,
+      "answer_rate": 0.46153846153846156,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.4,
+      "n": 13.0,
+      "answer_rate": 0.46153846153846156,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.42,
+      "n": 13.0,
+      "answer_rate": 0.6153846153846154,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.44,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.46,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.48,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.5,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.52,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.54,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.56,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.58,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.6,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.62,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.64,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.66,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.68,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.7,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.72,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.74,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.76,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.78,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.8,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.82,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.84,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.86,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.88,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.9,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.92,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.94,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.96,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 0.98,
+      "n": 13.0,
+      "answer_rate": 0.7692307692307693,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    },
+    {
+      "threshold": 1.0,
+      "n": 13.0,
+      "answer_rate": 1.0,
+      "empirical_risk": 0.0,
+      "failures": 0.0
+    }
+  ]
+}

@@ -3,166 +3,173 @@
 It answers one question per request: *given this tenant's risk budget and the
 verifier's scores, may we return this response at all?*
 
-**Scaffold.** The runtime decision logic below is real; the calibration behind it
-is not. :class:`StubCalibrationStore` returns a fixed threshold that was not
-fitted to anything. Week 7 replaces it with thresholds selected by
-:mod:`aletheia.risk.ltt` over a held-out calibration set, stored per tenant in
-Postgres alongside the corpus snapshot they were fitted on.
+The threshold comes from a stored Learn-then-Test run
+(:mod:`aletheia.eval.calibrate`). There is no fallback threshold and there is
+deliberately no default: with no certified, fresh calibration for the requested
+alpha, the answer is `abstain(stale_calibration)`. An answer without a guarantee
+is not the product, and a guessed threshold would be a guarantee-shaped string
+with nothing behind it.
 
-**Statistic orientation.** The statistic is a *risk* score: lower is better, and
-we abstain when it exceeds the threshold λ. The PRD's worked example (§6) and its
-prose (§5.2 step 4) disagree on the direction; this is the resolved convention
-and the PRD should be corrected to match.
-
-**The statistic is computed after the action policy runs**, not before. The bound
-applies to the text the user actually receives, so removing a bad claim and then
-quoting a bound computed before the removal would be circular (ADR-0004).
+The statistic and the action policy live in :mod:`aletheia.risk.statistic`,
+shared with the calibration job — a threshold fitted against one statistic and
+applied to another is arithmetically valid and empirically meaningless.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
+import logging
+from contextlib import asynccontextmanager
+from datetime import UTC
+
+from fastapi import FastAPI
 
 from aletheia.contracts import (
     AbstainReason,
-    Claim,
-    ClaimAction,
-    ClaimStatus,
     DecideRequest,
     DecideResponse,
     Decision,
-    Mode,
+)
+from aletheia.db import get_db
+from aletheia.risk import store
+from aletheia.risk.statistic import (
+    apply_action_policy,
+    response_loss,
+    retained,
+    risk_statistic,
 )
 from aletheia.service import create_app
 from aletheia.settings import get_settings
 
-app = create_app("risk")
+log = logging.getLogger("risk")
+
+_ready = False
 
 
-@dataclass(frozen=True)
-class CalibrationRecord:
-    calibration_id: str
-    threshold: float
-    alpha: float
-    delta: float
-    n: int
-    created_at: datetime
-
-    def is_stale(self, max_age_hours: int) -> bool:
-        age = datetime.now(UTC) - self.created_at
-        return age.total_seconds() > max_age_hours * 3600
-
-
-class StubCalibrationStore:
-    """Placeholder for the per-tenant calibration table.
-
-    Week 7 replaces this with a Postgres-backed store keyed by
-    ``(tenant_id, alpha)``, holding thresholds produced by
-    :func:`aletheia.risk.ltt.select` and the transaction-time corpus snapshot they
-    were fitted on. Small tenants will not have enough calibration data of their
-    own — hierarchical or pooled calibration is PRD open question 3.
-    """
-
-    def get(self, tenant_id: str, alpha: float) -> CalibrationRecord | None:
-        return CalibrationRecord(
-            calibration_id="cal_stub_v0",
-            # Not fitted to anything. A threshold that has never seen data is a
-            # placeholder, and the guarantee string below says so.
-            threshold=0.5,
-            alpha=alpha,
-            delta=0.05,
-            n=0,
-            created_at=datetime.now(UTC),
-        )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _ready
+    db = get_db()
+    try:
+        await db.open()
+        _ready = await db.healthy()
+    except Exception:
+        log.exception("could not open the database; running degraded")
+        _ready = False
+    yield
+    await db.close()
 
 
-_store = StubCalibrationStore()
+app = create_app("risk", ready=lambda: _ready, lifespan=lifespan)
 
 
-def apply_action_policy(claims: list[Claim], mode: Mode) -> list[Claim]:
-    """Mark each claim according to the tenant's mode."""
-    out: list[Claim] = []
-    for claim in claims:
-        if claim.status == ClaimStatus.SUPPORTED:
-            action = ClaimAction.KEPT
-        elif mode == Mode.STRICT:
-            action = ClaimAction.REMOVED
-        elif mode == Mode.FLAGGED:
-            action = ClaimAction.FLAGGED
-        else:  # permissive
-            action = ClaimAction.KEPT
-        out.append(claim.model_copy(update={"action": action}))
-    return out
-
-
-def risk_statistic(claims: list[Claim]) -> float:
-    """Scalar risk of the response, in [0, 1]. Lower is better.
-
-    Currently ``1 − min(support_score)`` over retained claims: the weakest link,
-    which is what a per-response bound is about. PRD open question 1 lists the
-    alternatives (mean support, unsupported fraction, a learned scorer); week 6
-    picks between them empirically. Whatever wins must stay a single scalar,
-    because that is what the threshold is applied to.
-    """
-    retained = [c for c in claims if c.action != ClaimAction.REMOVED]
-    if not retained:
-        return 1.0
-    return 1.0 - min(c.support_score for c in retained)
+def _abstain(reason: AbstainReason, guarantee: str, *, degraded: bool) -> DecideResponse:
+    return DecideResponse(
+        decision=Decision.ABSTAIN,
+        abstain_reason=reason,
+        guarantee=guarantee,
+        degraded=degraded,
+        claims=[],
+    )
 
 
 @app.post("/decide", response_model=DecideResponse)
 async def decide(req: DecideRequest) -> DecideResponse:
     settings = get_settings()
-    calibration = _store.get(req.tenant_id, req.risk_budget)
 
-    if calibration is None or calibration.is_stale(settings.calibration_max_age_hours):
-        # No valid threshold means no guarantee, and an answer without a
-        # guarantee is not the product.
-        return DecideResponse(
-            decision=Decision.ABSTAIN,
-            abstain_reason=AbstainReason.STALE_CALIBRATION,
+    async with get_db().connection() as conn:
+        record = await store.latest(conn, req.tenant_id, req.risk_budget)
+        cur = await conn.execute("SELECT now() AS t")
+        now = (await cur.fetchone())["t"]
+
+    if record is None:
+        return _abstain(
+            AbstainReason.STALE_CALIBRATION,
+            f"no guarantee in force: no certified calibration for alpha={req.risk_budget:g} "
+            f"and tenant {req.tenant_id!r}",
             degraded=True,
-            guarantee="no guarantee issued: calibration missing or stale",
-            claims=[],
+        )
+    if record.is_stale(settings.calibration_max_age_hours, now=now):
+        # Age is a crude proxy for exchangeability having lapsed, but a lapsed
+        # assumption invalidates the bound, and continuing to quote it would be
+        # the one dishonesty this system cannot afford (PRD §5.2).
+        return _abstain(
+            AbstainReason.STALE_CALIBRATION,
+            f"no guarantee in force: calibration {record.calibration_id} is older "
+            f"than {settings.calibration_max_age_hours}h",
+            degraded=True,
         )
 
-    claims = apply_action_policy(list(req.claims), req.mode)
-    retained = [c for c in claims if c.action != ClaimAction.REMOVED]
+    claims = apply_action_policy(req.claims, req.mode)
+    kept = retained(claims)
     statistic = risk_statistic(claims)
+    guarantee = record.guarantee()
 
-    guarantee = (
-        f"P(unsupported_claim) <= {req.risk_budget:g} with "
-        f"{round((1 - calibration.delta) * 100)}% confidence, "
-        f"calibration_id={calibration.calibration_id}"
-    )
-    # n == 0 means this threshold was never fitted. Say so rather than quoting a
-    # bound we have not earned.
-    unfitted = calibration.n == 0
-    if unfitted:
-        guarantee = f"UNCALIBRATED SCAFFOLD — no bound is in force (calibration_id={calibration.calibration_id})"
-
-    if not retained or statistic > calibration.threshold:
+    if not kept:
         return DecideResponse(
             decision=Decision.ABSTAIN,
             statistic=round(statistic, 4),
-            threshold=calibration.threshold,
-            calibration_id=calibration.calibration_id,
+            threshold=record.threshold,
+            calibration_id=record.calibration_id,
             guarantee=guarantee,
             abstain_reason=AbstainReason.INSUFFICIENT_EVIDENCE,
-            degraded=unfitted,
             claims=[],
         )
 
-    has_flags = any(c.action == ClaimAction.FLAGGED for c in claims) or any(
-        c.action == ClaimAction.REMOVED for c in claims
-    )
+    if statistic > record.threshold:
+        return DecideResponse(
+            decision=Decision.ABSTAIN,
+            statistic=round(statistic, 4),
+            threshold=record.threshold,
+            calibration_id=record.calibration_id,
+            guarantee=guarantee,
+            abstain_reason=AbstainReason.INSUFFICIENT_EVIDENCE,
+            claims=[],
+        )
+
+    # In permissive mode unsupported claims are kept as generated, so the bound
+    # does not describe what is being returned. Saying so is the difference
+    # between a caveat and a false statement.
+    if response_loss(claims):
+        guarantee = (
+            "no guarantee in force: permissive mode returns unsupported claims "
+            f"(threshold {record.threshold:g} from {record.calibration_id})"
+        )
+
+    edited = any(c.action != "kept" for c in claims)
     return DecideResponse(
-        decision=Decision.ANSWER_WITH_FLAGS if has_flags else Decision.ANSWER,
+        decision=Decision.ANSWER_WITH_FLAGS if edited else Decision.ANSWER,
         statistic=round(statistic, 4),
-        threshold=calibration.threshold,
-        calibration_id=calibration.calibration_id,
+        threshold=record.threshold,
+        calibration_id=record.calibration_id,
         guarantee=guarantee,
-        degraded=unfitted,
         claims=claims,
     )
+
+
+@app.get("/calibration/{tenant_id}")
+async def calibration(tenant_id: str, alpha: float = 0.05) -> dict:
+    """What guarantee is currently in force, if any. For operators and the demo."""
+    async with get_db().connection() as conn:
+        record = await store.latest(conn, tenant_id, alpha)
+        cur = await conn.execute("SELECT now() AS t")
+        now = (await cur.fetchone())["t"]
+
+    if record is None:
+        return {"in_force": False, "reason": "no certified calibration"}
+
+    settings = get_settings()
+    stale = record.is_stale(settings.calibration_max_age_hours, now=now)
+    return {
+        "in_force": not stale,
+        "reason": "stale" if stale else "",
+        "calibration_id": record.calibration_id,
+        "alpha": record.alpha,
+        "delta": record.delta,
+        "threshold": record.threshold,
+        "n": record.n,
+        "coverage": record.coverage,
+        "empirical_risk": record.empirical_risk,
+        "statistic": record.statistic_name,
+        "created_at": record.created_at.astimezone(UTC).isoformat(),
+        "guarantee": record.guarantee(),
+    }

@@ -51,8 +51,14 @@ class Settings(BaseSettings):
     embedding_model: str = "intfloat/multilingual-e5-base"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     nli_model: str = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
-    llm_provider: str = "stub"
     llm_model: str = "claude-sonnet-5"
+
+    # Generation backend: "extractive" selects sentences from the retrieved
+    # chunks — deterministic, no key, and *incapable of hallucinating*, so any
+    # bound calibrated against it measures retrieval and verifier strictness
+    # rather than unsupported generation. "anthropic" needs ANTHROPIC_API_KEY.
+    generation_backend: str = "extractive"
+    generation_max_claims: int = 4
 
     # Risk control.
     default_risk_budget: float = 0.05
@@ -61,8 +67,13 @@ class Settings(BaseSettings):
     # on, and the guarantee it backs is not one we are willing to quote.
     calibration_max_age_hours: int = 168
 
-    # Verifier. A claim scoring at or above this is treated as supported.
-    # Provisional: the real value is whatever week 6 measures.
+    # Verifier. "overlap" is the model-free baseline and an ablation row; "nli"
+    # scores P(entailment) with a multilingual model and needs the `models` extra.
+    verifier_backend: str = "overlap"
+    verifier_batch_size: int = 16
+    # A claim scoring at or above this is treated as supported. This is *not* the
+    # risk threshold — that one is calibrated (ADR-0004). This only decides the
+    # per-claim label the action policy acts on.
     support_threshold: float = 0.5
 
 

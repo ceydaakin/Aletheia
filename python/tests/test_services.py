@@ -3,15 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from aletheia.contracts import (
-    Chunk,
-    Claim,
-    ClaimAction,
-    ClaimStatus,
-    Decision,
-    DraftClaim,
-    Mode,
-)
+from aletheia.contracts import Chunk, ClaimStatus, DraftClaim
 from aletheia.generation.app import app as generation_app
 from aletheia.retrieval.app import app as retrieval_app
 from aletheia.risk.app import app as risk_app
@@ -40,34 +32,62 @@ def test_healthz_does_not_depend_on_anything(name: str) -> None:
         assert client.get("/metrics").status_code == 200
 
 
-@pytest.mark.parametrize("name", ["generation", "verifier", "risk"])
+@pytest.mark.parametrize("name", ["generation", "verifier"])
 def test_stateless_services_are_ready_without_dependencies(name: str) -> None:
+    """Generation and verification hold their models in-process and touch nothing else."""
     with TestClient(ALL_APPS[name]) as client:
         assert client.get("/readyz").status_code == 200
 
 
-def test_retrieval_reports_not_ready_without_a_database() -> None:
-    """Degraded, not dead: /readyz stops traffic, /healthz keeps the container."""
-    with TestClient(retrieval_app) as client:
+@pytest.mark.parametrize("name", ["retrieval", "risk"])
+def test_stateful_services_report_not_ready_without_a_database(name: str) -> None:
+    """Degraded, not dead: /readyz stops traffic, /healthz keeps the container.
+
+    Risk joined this list when its threshold stopped being a hardcoded constant
+    and started coming from a stored calibration run.
+    """
+    with TestClient(ALL_APPS[name]) as client:
         assert client.get("/healthz").status_code == 200
         assert client.get("/readyz").status_code == 503
 
 
-def test_generation_emits_an_uncited_claim() -> None:
-    """The stub must not be perfectly cited, or a broken verifier looks correct."""
+
+def test_extractive_generation_cites_everything_it_says() -> None:
+    """Extractive generation copies sentences from evidence, so it cannot produce
+    an uncited claim — and therefore cannot hallucinate.
+
+    That is convenient for reproducibility and load-bearing when reading any
+    number calibrated against it: the loss such a calibration measures comes from
+    retrieval and verifier strictness, never from unsupported generation.
+    """
     with TestClient(generation_app) as client:
         resp = client.post(
             "/generate",
             json={
                 "tenant_id": "acme",
-                "query": "notice period?",
+                "query": "notice period days",
                 "chunks": [
-                    Chunk(chunk_id="c1", doc_id="d1", text="Notice is 30 days.").model_dump()
+                    Chunk(
+                        chunk_id="c1", doc_id="d1",
+                        text="The notice period is 30 days. Unrelated sentence here.",
+                    ).model_dump()
                 ],
             },
         )
         claims = resp.json()["claims"]
-        assert any(not c["citations"] for c in claims)
+        assert claims, "expected at least one claim for an on-topic query"
+        assert all(c["citations"] == ["c1"] for c in claims)
+
+
+def test_generation_with_no_chunks_produces_nothing() -> None:
+    """Nothing retrieved means nothing to ground an answer in. Returning empty
+    lets the gateway abstain rather than inviting a model to fill the gap."""
+    with TestClient(generation_app) as client:
+        resp = client.post(
+            "/generate",
+            json={"tenant_id": "acme", "query": "anything", "chunks": []},
+        )
+        assert resp.json() == {"answer": "", "claims": []}
 
 
 def test_verifier_treats_uncited_claims_as_unsupported() -> None:
@@ -96,89 +116,6 @@ def test_verifier_treats_uncited_claims_as_unsupported() -> None:
         assert claims[1]["support_score"] == 0.0
         # A dangling citation looks like evidence and must score zero.
         assert claims[2]["support_score"] == 0.0
-
-
-def _claim(text: str, score: float, status: ClaimStatus) -> dict:
-    return Claim(
-        text=text, citations=["c1"] if score > 0 else [], support_score=score, status=status
-    ).model_dump()
-
-
-def test_risk_strict_mode_removes_unsupported_claims() -> None:
-    with TestClient(risk_app) as client:
-        resp = client.post(
-            "/decide",
-            json={
-                "tenant_id": "acme",
-                "risk_budget": 0.05,
-                "mode": Mode.STRICT.value,
-                "claims": [
-                    _claim("Supported.", 0.95, ClaimStatus.SUPPORTED),
-                    _claim("Unsupported.", 0.05, ClaimStatus.UNSUPPORTED),
-                ],
-            },
-        )
-        body = resp.json()
-        assert body["decision"] == Decision.ANSWER_WITH_FLAGS
-        actions = [c["action"] for c in body["claims"]]
-        assert actions == [ClaimAction.KEPT, ClaimAction.REMOVED]
-
-
-def test_risk_statistic_is_computed_after_the_action_policy() -> None:
-    """ADR-0004: the bound is about the text the user receives.
-
-    In strict mode the weak claim is removed, so it must not drag the statistic
-    down and force an abstention on an answer that no longer contains it.
-    """
-    payload = {
-        "tenant_id": "acme",
-        "risk_budget": 0.05,
-        "claims": [
-            _claim("Supported.", 0.95, ClaimStatus.SUPPORTED),
-            _claim("Unsupported.", 0.01, ClaimStatus.UNSUPPORTED),
-        ],
-    }
-    with TestClient(risk_app) as client:
-        strict = client.post("/decide", json={**payload, "mode": Mode.STRICT.value}).json()
-        flagged = client.post("/decide", json={**payload, "mode": Mode.FLAGGED.value}).json()
-
-    # Strict: statistic reflects only the surviving claim.
-    assert strict["statistic"] == pytest.approx(1 - 0.95, abs=1e-4)
-    assert strict["decision"] != Decision.ABSTAIN
-    # Flagged: the weak claim is still in the answer, so it still counts.
-    assert flagged["statistic"] == pytest.approx(1 - 0.01, abs=1e-4)
-    assert flagged["decision"] == Decision.ABSTAIN
-
-
-def test_risk_abstains_when_every_claim_is_removed() -> None:
-    with TestClient(risk_app) as client:
-        body = client.post(
-            "/decide",
-            json={
-                "tenant_id": "acme",
-                "risk_budget": 0.05,
-                "mode": Mode.STRICT.value,
-                "claims": [_claim("Unsupported.", 0.02, ClaimStatus.UNSUPPORTED)],
-            },
-        ).json()
-        assert body["decision"] == Decision.ABSTAIN
-        assert body["abstain_reason"] == "insufficient_evidence"
-        assert body["claims"] == []
-
-
-def test_uncalibrated_scaffold_never_claims_a_bound() -> None:
-    """The stub threshold was fitted to nothing, and the response must admit it."""
-    with TestClient(risk_app) as client:
-        body = client.post(
-            "/decide",
-            json={
-                "tenant_id": "acme",
-                "risk_budget": 0.05,
-                "claims": [_claim("Supported.", 0.99, ClaimStatus.SUPPORTED)],
-            },
-        ).json()
-        assert body["degraded"] is True
-        assert "UNCALIBRATED" in body["guarantee"]
 
 
 def test_unknown_fields_are_rejected() -> None:

@@ -61,6 +61,16 @@ backfill: ## Embed chunks stored without vectors: make backfill TENANT=demo
 eval-retrieval: ## Measure retrieval: make eval-retrieval DATASET=../eval/datasets/bootstrap-tr
 	cd python && $(PY) -m aletheia.eval.retrieval --dataset $(DATASET) --ingest
 
+.PHONY: calibrate
+calibrate: ## Fit and certify a threshold: make calibrate DATASET=../eval/datasets/bootstrap-tr ALPHA=0.05
+	cd python && VERIFIER_BACKEND=nli $(PY) -m aletheia.eval.calibrate \
+		--dataset $(DATASET) --alpha $(or $(ALPHA),0.05) \
+		--curve ../eval/results/$(notdir $(DATASET))-curve.json
+
+.PHONY: test-slow
+test-slow: ## Run the model-backed tests (downloads weights, minutes on CPU)
+	cd python && ALETHEIA_SLOW_TESTS=1 $(PY) -m pytest -m slow
+
 # --- Build / test --------------------------------------------------------
 
 .PHONY: test

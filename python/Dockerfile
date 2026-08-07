@@ -16,13 +16,28 @@ COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
-# Model extras are deliberately NOT installed here: the scaffold runs without
-# torch, and a several-gigabyte image would make `docker compose up` on a clean
-# machine (G6) a much worse first experience. Week 3 adds a `models` stage that
-# layers them on for the services that need them.
-
 RUN useradd --create-home --uid 10001 aletheia
 USER aletheia
 
 # Overridden per service in docker-compose.yml.
 CMD ["uvicorn", "aletheia.retrieval.app:app", "--host", "0.0.0.0", "--port", "8001"]
+
+# ---------------------------------------------------------------------------
+
+# Model-backed variant. Not the default: torch plus the weights is several
+# gigabytes, and `docker compose up` on a clean machine (PRD G6) should not pay
+# for that before anyone has decided to use the dense arm or the NLI verifier.
+#
+# Build it with `docker compose build --build-arg TARGET=models`, or point a
+# service at it explicitly. The weights themselves download on first use and
+# belong on a mounted cache volume, not in the image.
+FROM base AS models
+
+USER root
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir ".[models]"
+USER aletheia
+
+ENV HF_HOME=/home/aletheia/.cache/huggingface
+
+CMD ["uvicorn", "aletheia.verifier.app:app", "--host", "0.0.0.0", "--port", "8003"]

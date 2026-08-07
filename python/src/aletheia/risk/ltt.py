@@ -5,13 +5,29 @@ is designed around its interface. It implements the exact form of the procedure,
 which is valid for the loss we actually use:
 
 The controlled loss is **binary per response** — "does the response we would
-return at threshold λ contain at least one unsupported claim?" (ADR-0004). For a
-binary loss, the number of failures on an i.i.d. calibration set is exactly
-Binomial(n, R(λ)), so the p-value for the null hypothesis
+return at threshold λ contain at least one unsupported claim?" (ADR-0004).
+
+The risk is **selective**: it is conditioned on having answered.
+
+    R(λ) = P(response contains an unsupported claim | we answered at λ)
+
+Not the marginal ``P(loss and answered)``. The difference is not cosmetic — the
+marginal is always the smaller number, because abstentions dilute it — and the
+selective form is the one that matches what a user reads. Someone who receives an
+answer wants to know the chance *that answer* is wrong; the fact that the system
+declined ten other questions does not make the answer they hold any safer. Testing
+the marginal while reporting the selective is a bound that is arithmetically valid
+and empirically false, which is exactly what this module measured before the
+distinction was made explicit: held-out risk exceeded α in 56% of certified runs.
+
+Conditioning on the answered count makes the test conditional on the selection
+event. That is the standard treatment for selective risk and is what makes the
+exact binomial applicable: given ``m`` answered responses, the failure count is
+Binomial(m, R(λ)), so the p-value for
 
     H_λ :  R(λ) > α
 
-is the exact binomial tail ``P(Bin(n, α) <= k)`` — no concentration inequality
+is the exact binomial tail ``P(Bin(m, α) <= k)`` — no concentration inequality
 needed, and no slack given away. Rejecting H_λ certifies λ. Testing a grid of λ
 requires a multiplicity correction; Bonferroni at level δ/|Λ| is used here
 because it is valid under arbitrary dependence between the tests, and the tests
@@ -30,7 +46,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from math import exp, lgamma, log, log1p
+from math import ceil, exp, lgamma, log, log1p
 
 
 def binomial_tail(n: int, k: int, p: float) -> float:
@@ -123,7 +139,13 @@ def select(
     # Bonferroni across the grid: valid under arbitrary dependence between tests.
     level = delta / len(candidates)
 
-    certified = [c for c in candidates if pvalue(n, c.failures, alpha) <= level]
+    # Tested against the number *answered*, not the calibration set size: the
+    # controlled quantity is the selective risk. Using n here would certify the
+    # marginal risk, which abstentions make smaller — and would therefore issue a
+    # bound that held-out data does not honour.
+    certified = [
+        c for c in candidates if c.answered > 0 and pvalue(c.answered, c.failures, alpha) <= level
+    ]
     if not certified:
         # No threshold clears the bar. Answering anyway would mean quoting a
         # guarantee we did not earn.
@@ -146,9 +168,26 @@ def select(
         delta=delta,
         n=n,
         coverage=best.answered / n,
-        empirical_risk=best.failures / n if n else 0.0,
+        # Selective, matching what was certified: failures among answered.
+        empirical_risk=best.failures / best.answered if best.answered else 0.0,
         certified=True,
     )
+
+
+def minimum_certifiable_n(alpha: float, delta: float, grid_size: int) -> int:
+    """Smallest answered count that could certify a threshold, even flawlessly.
+
+    A run with zero observed failures has p = (1−α)^m, and Bonferroni requires
+    p ≤ δ/|Λ|. Solving for m gives a floor that no amount of system quality can
+    get under — at α=0.05, δ=0.05 and a 50-point grid it is 135 responses.
+
+    Worth reporting when certification fails, because "the verifier is bad" and
+    "the calibration set is too small to say anything" look identical from the
+    outside and have completely different fixes.
+    """
+    if not 0.0 < alpha < 1.0 or not 0.0 < delta < 1.0 or grid_size < 1:
+        raise ValueError("alpha and delta must lie in (0, 1) and grid_size must be positive")
+    return ceil(log(delta / grid_size) / log(1 - alpha))
 
 
 def guarantee_text(selection: Selection, calibration_id: str) -> str:

@@ -59,7 +59,9 @@ def test_select_prefers_the_highest_coverage_certified_threshold() -> None:
     assert result.certified
     assert result.lambda_value == 0.3
     assert result.coverage == pytest.approx(0.8)
-    assert result.empirical_risk == pytest.approx(0.02)
+    # Selective: failures among the 800 answered, not among all 1000. Abstentions
+    # do not make the answers that were given any safer.
+    assert result.empirical_risk == pytest.approx(20 / 800)
 
 
 def test_select_reports_failure_rather_than_shipping_the_least_bad_threshold() -> None:
@@ -82,7 +84,9 @@ def test_select_applies_a_multiplicity_correction() -> None:
     easier — exactly backwards.
     """
     n, alpha = 200, 0.05
-    borderline = LambdaCandidate(value=0.4, failures=4, answered=150)
+    # 4 failures out of 200 answered: p ≈ 0.029, which clears delta=0.05 on its
+    # own but not delta/400.
+    borderline = LambdaCandidate(value=0.4, failures=4, answered=200)
 
     alone = select([borderline], n=n, alpha=alpha, delta=0.05)
     padding = [

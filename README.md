@@ -17,12 +17,13 @@ P(unsupported claim) <= 0.05, with 95% confidence — calibration_id=cal_2026_07
 …and, when the evidence is too thin to honour it, an `abstain` with a reason code and
 the three best sources instead of a fluent guess.
 
-**Status: week 3 of 12.** Ingestion, the bitemporal chunk store, and hybrid retrieval are
-real: documents are parsed, chunked with exact character spans, versioned, indexed with
-language-aware full-text search alongside pgvector, and retrieved as of any point in
-history. Generation, verification, and calibration are still stubs returning well-formed
-placeholder data. See [docs/PRD.md](docs/PRD.md) for the full product spec (Turkish) and
-[docs/adr/](docs/adr/) for the architecture decisions.
+**Status: the pipeline is real end to end.** Ingestion, the bitemporal store, hybrid
+retrieval, claim decomposition, NLI verification, and Learn-then-Test calibration all
+run; nothing is a stub returning placeholder data. What is *not* done is the science:
+the eval sets are small, and the default generator is extractive and therefore cannot
+hallucinate, so no bound produced today transfers to a generative system. See
+[Where this actually stands](#where-this-actually-stands) below, [docs/PRD.md](docs/PRD.md)
+for the product spec (Turkish), and [docs/adr/](docs/adr/) for the decisions.
 
 ---
 
@@ -154,6 +155,64 @@ Retrieval returns something for all three unanswerable queries. That is expected
 defect: disjunctive matching retrieves anything sharing a term, so retrieval alone cannot
 identify out-of-corpus questions. Deciding that no answer is supportable is the
 verifier's and the risk controller's job.
+
+## The guarantee
+
+A threshold is not a constant in a config file. It is fitted on a labelled calibration
+set, certified by a hypothesis test, and stored with the corpus snapshot it was fitted
+on:
+
+```bash
+cd python
+VERIFIER_BACKEND=nli python -m aletheia.eval.calibrate \
+  --dataset ../eval/datasets/bootstrap-tr --alpha 0.05 --curve ../eval/results/curve.json
+```
+
+The risk controller reads that record at request time. **With no certified, fresh
+calibration for the requested α, it abstains** — there is no fallback threshold and no
+default, because a guessed one would be a guarantee-shaped string with nothing behind
+it. `GET /calibration/{tenant}` reports what is currently in force.
+
+The controlled quantity is *selective* risk — P(response is wrong | we answered), not
+P(wrong and answered). The difference is large at low answer rates and favours the
+vendor, so it gets its own decision record ([ADR-0007](docs/adr/0007-selective-risk.md)).
+Getting it wrong is not hypothetical: the first implementation certified the marginal
+risk while evaluating the selective one, and held-out risk exceeded α in **56% of
+certified runs** with nothing in the code looking wrong.
+
+Certification has a hard floor. With zero observed failures the p-value is (1−α)^m, so
+Bonferroni over a 50-point λ grid needs **135 answered calibration responses at α=0.05**
+regardless of how good the system is. The calibration job computes this and says so when
+it fails, because "the verifier is bad" and "the sample cannot say anything" look
+identical from outside and have opposite fixes.
+
+## Where this actually stands
+
+Honest accounting, because the whole point of this project is not overclaiming.
+
+**Real and measured.** The bitemporal store, hybrid retrieval, claim decomposition, and
+the NLI verifier. The verifier scores `otuz gündür` at 0.985 against its evidence and the
+contradicting `altmış gündür` at 0.139 — the discrimination the entire thesis rests on.
+The lexical-overlap baseline scores that same false claim *above* the support threshold,
+which is why it is a baseline and not a verifier.
+
+**Real but not yet meaningful.** The calibration machinery is verified against synthetic
+data with known ground truth: across 60 runs, thresholds certified at α held on unseen
+data. But on `bootstrap-tr` it correctly certifies *nothing* — 27 queries is far below the
+135-response floor. That is the machinery working, not failing.
+
+**Not done.**
+
+- **Eval sets are far too small** (PRD §7.2 asks for ~400 hand-verified triples per
+  corpus; there are 27). This is the binding constraint on every number.
+- **The default generator is extractive** — it copies sentences from retrieved chunks, so
+  it cannot hallucinate. A bound calibrated against it measures retrieval quality and
+  verifier strictness, *not* unsupported generation, and does not transfer. The Anthropic
+  backend exists and needs a key.
+- **The verifier's own error rate is not folded into the bound** (PRD open question 4).
+  Calibration labels come from the verifier, so the guarantee is conditional on it.
+- Weeks 8–12 of the roadmap: gateway hardening, cross-lingual calibration, k3s, OTel,
+  ablation tables, the technical report.
 
 ## Repository layout
 
