@@ -6,7 +6,14 @@ import math
 
 import pytest
 
-from aletheia.risk.ltt import LambdaCandidate, binomial_tail, guarantee_text, pvalue, select
+from aletheia.risk.ltt import (
+    BONFERRONI,
+    LambdaCandidate,
+    binomial_tail,
+    guarantee_text,
+    pvalue,
+    select,
+)
 
 
 def _reference_tail(n: int, k: int, p: float) -> float:
@@ -88,11 +95,11 @@ def test_select_applies_a_multiplicity_correction() -> None:
     # own but not delta/400.
     borderline = LambdaCandidate(value=0.4, failures=4, answered=200)
 
-    alone = select([borderline], n=n, alpha=alpha, delta=0.05)
+    alone = select([borderline], n=n, alpha=alpha, delta=0.05, correction=BONFERRONI)
     padding = [
         LambdaCandidate(value=0.4 + 0.001 * i, failures=199, answered=200) for i in range(1, 400)
     ]
-    in_grid = select([borderline, *padding], n=n, alpha=alpha, delta=0.05)
+    in_grid = select([borderline, *padding], n=n, alpha=alpha, delta=0.05, correction=BONFERRONI)
 
     assert alone.certified
     assert not in_grid.certified

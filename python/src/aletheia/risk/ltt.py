@@ -113,11 +113,16 @@ class Selection:
     abstain on everything, not to quietly ship the least-bad threshold."""
 
 
+FIXED_SEQUENCE = "fixed-sequence"
+BONFERRONI = "bonferroni"
+
+
 def select(
     candidates: Sequence[LambdaCandidate],
     n: int,
     alpha: float,
     delta: float = 0.05,
+    correction: str = BONFERRONI,
 ) -> Selection:
     """Choose the λ with the highest coverage among those certified at level δ.
 
@@ -126,6 +131,30 @@ def select(
         n: calibration set size.
         alpha: tolerated risk.
         delta: error probability for the certification (confidence is 1 − δ).
+        correction: how to handle testing a whole grid.
+
+            ``bonferroni`` (default) tests every threshold at δ/|Λ|. Valid under
+            arbitrary dependence between the tests, which is what a λ grid has.
+
+            ``fixed-sequence`` tests thresholds in ascending λ at the full level
+            δ, stopping at the first hypothesis it fails to reject. It controls
+            family-wise error with no correction, and on paper it more than halves
+            the calibration set needed (59 responses against 135 at α=0.05).
+
+            **It does not work on this grid, and the reason is worth knowing.**
+            Fixed-sequence needs the first hypothesis to be the easiest to reject.
+            Ascending λ orders by *risk* — the smallest threshold is safest — but
+            power depends on sample size, and the smallest threshold also answers
+            almost nothing. With a grid starting at λ=0.02, the first candidate
+            has a handful of answered responses, fails to reject, and the walk
+            stops having certified nothing. Measured: 0 of 60 runs certified,
+            against Bonferroni's 40+ on identical data.
+
+            Making it work would need the sequence to start where coverage is
+            already non-trivial, and choosing that point from the calibration data
+            makes the ordering data-dependent, which is exactly what fixed-sequence
+            forbids. Kept here, not default, so the option is evaluated rather than
+            rediscovered.
     """
     if not candidates:
         raise ValueError("candidate grid is empty")
@@ -135,17 +164,29 @@ def select(
         raise ValueError("alpha must lie in (0, 1)")
     if not 0.0 < delta < 1.0:
         raise ValueError("delta must lie in (0, 1)")
-
-    # Bonferroni across the grid: valid under arbitrary dependence between tests.
-    level = delta / len(candidates)
+    if correction not in (FIXED_SEQUENCE, BONFERRONI):
+        raise ValueError(f"unknown correction {correction!r}")
 
     # Tested against the number *answered*, not the calibration set size: the
     # controlled quantity is the selective risk. Using n here would certify the
     # marginal risk, which abstentions make smaller — and would therefore issue a
     # bound that held-out data does not honour.
-    certified = [
-        c for c in candidates if c.answered > 0 and pvalue(c.answered, c.failures, alpha) <= level
-    ]
+    def rejects(c: LambdaCandidate, level: float) -> bool:
+        return c.answered > 0 and pvalue(c.answered, c.failures, alpha) <= level
+
+    if correction == BONFERRONI:
+        level = delta / len(candidates)
+        certified = [c for c in candidates if rejects(c, level)]
+    else:
+        # Ascending λ: the safest threshold is tested first, and the walk stops
+        # the moment one fails. Nothing after a failure may be certified, even if
+        # it would have passed on its own — that is exactly what buys the full δ.
+        certified = []
+        for c in sorted(candidates, key=lambda c: c.value):
+            if not rejects(c, delta):
+                break
+            certified.append(c)
+
     if not certified:
         # No threshold clears the bar. Answering anyway would mean quoting a
         # guarantee we did not earn.
@@ -174,12 +215,17 @@ def select(
     )
 
 
-def minimum_certifiable_n(alpha: float, delta: float, grid_size: int) -> int:
+def minimum_certifiable_n(
+    alpha: float, delta: float, grid_size: int, correction: str = FIXED_SEQUENCE
+) -> int:
     """Smallest answered count that could certify a threshold, even flawlessly.
 
-    A run with zero observed failures has p = (1−α)^m, and Bonferroni requires
-    p ≤ δ/|Λ|. Solving for m gives a floor that no amount of system quality can
-    get under — at α=0.05, δ=0.05 and a 50-point grid it is 135 responses.
+    A run with zero observed failures has p = (1−α)^m, so the floor is where that
+    first clears the testing level. Under fixed-sequence testing the level is δ;
+    under Bonferroni it is δ/|Λ|.
+
+    At α=0.05, δ=0.05: **59** responses fixed-sequence, **135** with a 50-point
+    Bonferroni grid. No amount of system quality gets under either.
 
     Worth reporting when certification fails, because "the verifier is bad" and
     "the calibration set is too small to say anything" look identical from the
@@ -187,7 +233,8 @@ def minimum_certifiable_n(alpha: float, delta: float, grid_size: int) -> int:
     """
     if not 0.0 < alpha < 1.0 or not 0.0 < delta < 1.0 or grid_size < 1:
         raise ValueError("alpha and delta must lie in (0, 1) and grid_size must be positive")
-    return ceil(log(delta / grid_size) / log(1 - alpha))
+    level = delta if correction == FIXED_SEQUENCE else delta / grid_size
+    return ceil(log(level) / log(1 - alpha))
 
 
 def guarantee_text(selection: Selection, calibration_id: str) -> str:

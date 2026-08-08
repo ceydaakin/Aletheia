@@ -196,15 +196,37 @@ def risk_coverage_curve(observations: list[Observation], grid=GRID) -> list[dict
     ]
 
 
-def split(observations: list[Observation], fraction: float = 0.5) -> tuple[list, list]:
-    """Deterministic, leak-free split.
+def split(
+    observations: list[Observation], fraction: float = 0.5
+) -> tuple[list[Observation], list[Observation]]:
+    """Deterministic, leak-free split. ``fraction`` goes to calibration.
 
-    Interleaved rather than randomised: no seed to record, no shuffle to
-    reproduce, and the two halves stay balanced across whatever order the dataset
-    happens to be in.
+    Strided rather than randomised: no seed to record, no shuffle to reproduce,
+    and the two parts stay balanced across whatever order the dataset happens to
+    be in.
+
+    Weighting towards calibration is a real lever, not a fudge. Certification has
+    a hard sample-size floor (:func:`aletheia.risk.ltt.minimum_certifiable_n`)
+    while the test part only has to sanity-check the resulting threshold, so a
+    60/40 split can certify where 50/50 cannot. The cost is a noisier held-out
+    estimate, which is why the calibration job prints the test size next to the
+    number.
     """
-    calibration = [o for i, o in enumerate(observations) if i % 2 == 0]
-    test = [o for i, o in enumerate(observations) if i % 2 == 1]
+    if not 0.0 < fraction < 1.0:
+        raise ValueError("fraction must lie in (0, 1)")
+
+    # Place every 1/(1-fraction)-th item into test, so the two parts interleave
+    # instead of test being a contiguous tail of the dataset.
+    calibration: list[Observation] = []
+    test: list[Observation] = []
+    accumulated = 0.0
+    for observation in observations:
+        accumulated += 1.0 - fraction
+        if accumulated >= 1.0:
+            accumulated -= 1.0
+            test.append(observation)
+        else:
+            calibration.append(observation)
     return calibration, test
 
 
@@ -257,7 +279,7 @@ async def run(args: argparse.Namespace) -> int:
             if index % 10 == 0:
                 print(f"  {index}/{len(queries)}", flush=True)
 
-        calibration_set, test_set = split(observations)
+        calibration_set, test_set = split(observations, args.calibration_fraction)
         selection = ltt.select(
             candidates(calibration_set), n=len(calibration_set),
             alpha=args.alpha, delta=args.delta,
@@ -359,6 +381,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", default="strict", choices=[m.value for m in Mode])
     parser.add_argument("--ingest", action="store_true")
     parser.add_argument("--calibration-id", default="")
+    parser.add_argument(
+        "--calibration-fraction", type=float, default=0.5,
+        help="share of queries used to choose the threshold; the rest is held out",
+    )
     parser.add_argument("--curve", default="", help="write the risk-coverage curve here")
     parser.add_argument("--database-url", default="")
     args = parser.parse_args(argv)

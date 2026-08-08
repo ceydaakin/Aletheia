@@ -130,6 +130,49 @@ def synthetic(n: int, *, true_risk: float, rng: random.Random) -> list[Observati
     return observations
 
 
+def _violation_rate(correction: str, *, runs: int, n: int, alpha: float, delta: float) -> tuple[int, float]:
+    rng = random.Random(20260808)
+    certified_runs = 0
+    violations = 0
+    for _ in range(runs):
+        observations = synthetic(n, true_risk=0.25, rng=rng)
+        calibration_set, test_set = split(observations)
+        selection = ltt.select(
+            candidates(calibration_set), n=len(calibration_set),
+            alpha=alpha, delta=delta, correction=correction,
+        )
+        if not selection.certified:
+            continue
+        certified_runs += 1
+        if evaluate_at(test_set, selection.lambda_value)["empirical_risk"] > alpha:
+            violations += 1
+    return certified_runs, (violations / certified_runs if certified_runs else 0.0)
+
+
+def test_fixed_sequence_certifies_nothing_on_this_grid() -> None:
+    """Documents a negative result so it is not rediscovered.
+
+    Fixed-sequence testing needs its first hypothesis to be the easiest to reject.
+    Ascending λ orders by risk, but power comes from sample size, and the smallest
+    threshold answers almost nothing — so the walk stops at step one having
+    certified nothing. On paper it would more than halve the calibration set
+    needed; in practice it certifies strictly less than Bonferroni here.
+    """
+    fixed_runs, _ = _violation_rate(ltt.FIXED_SEQUENCE, runs=60, n=1200, alpha=0.10, delta=0.05)
+    bonferroni_runs, _ = _violation_rate(ltt.BONFERRONI, runs=60, n=1200, alpha=0.10, delta=0.05)
+
+    assert fixed_runs == 0
+    assert bonferroni_runs > 10, (
+        "if Bonferroni also stopped certifying, this test is measuring sample size "
+        "rather than the correction"
+    )
+
+
+def test_minimum_n_reflects_the_correction() -> None:
+    assert ltt.minimum_certifiable_n(0.05, 0.05, 50, ltt.FIXED_SEQUENCE) == 59
+    assert ltt.minimum_certifiable_n(0.05, 0.05, 50, ltt.BONFERRONI) == 135
+
+
 def test_certified_threshold_bounds_held_out_risk() -> None:
     """The end-to-end claim, on data where the truth is known by construction.
 
@@ -156,7 +199,8 @@ def test_certified_threshold_bounds_held_out_risk() -> None:
         calibration_set, test_set = split(observations)
 
         selection = ltt.select(
-            candidates(calibration_set), n=len(calibration_set), alpha=alpha, delta=delta
+            candidates(calibration_set), n=len(calibration_set), alpha=alpha,
+            delta=delta, correction=ltt.BONFERRONI,
         )
         if not selection.certified:
             continue
