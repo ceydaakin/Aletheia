@@ -46,6 +46,15 @@ type Config struct {
 	RateLimitPerSecond     float64
 	RateLimitBurst         int
 	MaxConcurrentPerTenant int
+
+	// OTLPEndpoint enables tracing when set. Empty means the propagator is still
+	// installed — so traceparent reaches the Python services — but nothing is
+	// exported.
+	OTLPEndpoint string
+	// TraceSampleRatio applies only to traces this service starts; a sampling
+	// decision made upstream is always honoured, because independently sampling
+	// each service produces traces with holes in them.
+	TraceSampleRatio float64
 }
 
 func Load() (*Config, error) {
@@ -63,6 +72,8 @@ func Load() (*Config, error) {
 		// node (PRD §4.2). Per tenant, so the total is higher with many tenants —
 		// this bounds the blast radius of one, not the node.
 		MaxConcurrentPerTenant: envInt("GATEWAY_MAX_CONCURRENT_PER_TENANT", 20),
+		OTLPEndpoint:           env("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		TraceSampleRatio:       envFloat("OTEL_TRACES_SAMPLER_ARG", 1.0),
 		Retrieval: Upstream{
 			Name:    "retrieval",
 			URL:     env("RETRIEVAL_URL", "http://retrieval:8001"),

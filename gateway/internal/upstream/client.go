@@ -104,6 +104,9 @@ func (c *Client) Post(ctx context.Context, path string, in, out any) error {
 	if id := obs.TraceID(ctx); id != "" {
 		req.Header.Set(HeaderTraceID, id)
 	}
+	// W3C traceparent, so the Python services continue this trace instead of
+	// starting their own and leaving the pipeline in unjoinable fragments.
+	obs.Inject(ctx, req)
 
 	resp, err := c.http.Do(req)
 	if err != nil {

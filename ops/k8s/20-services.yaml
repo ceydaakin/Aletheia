@@ -1,0 +1,237 @@
+# The four model services. Same image, different entrypoints (ADR-0003).
+#
+# Readiness differs by whether the service holds a dependency: retrieval and risk
+# report not-ready without a database, generation and the verifier are ready as
+# soon as they are up. Liveness never depends on a dependency for any of them —
+# a slow database must not get pods restart-looped (ADR-0001).
+
+apiVersion: v1
+kind: Service
+metadata: { name: retrieval, namespace: aletheia }
+spec:
+  selector: { app: retrieval }
+  ports: [{ port: 8001, name: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: retrieval, namespace: aletheia }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: retrieval } }
+  template:
+    metadata:
+      labels: { app: retrieval }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+    spec:
+      containers:
+        - name: retrieval
+          image: ghcr.io/ceydaakin/aletheia-python:0.1.0
+          command: ["uvicorn", "aletheia.retrieval.app:app", "--host", "0.0.0.0", "--port", "8001"]
+          ports: [{ containerPort: 8001 }]
+          envFrom: [{ configMapRef: { name: aletheia-config } }]
+          env:
+            - name: PORT
+              value: "8001"
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: aletheia, key: database-url } }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8001 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8001 }
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 200m, memory: 256Mi }
+            limits: { memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: generation, namespace: aletheia }
+spec:
+  selector: { app: generation }
+  ports: [{ port: 8002, name: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: generation, namespace: aletheia }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: generation } }
+  template:
+    metadata:
+      labels: { app: generation }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      containers:
+        - name: generation
+          image: ghcr.io/ceydaakin/aletheia-python:0.1.0
+          command: ["uvicorn", "aletheia.generation.app:app", "--host", "0.0.0.0", "--port", "8002"]
+          ports: [{ containerPort: 8002 }]
+          envFrom: [{ configMapRef: { name: aletheia-config } }]
+          env:
+            - name: PORT
+              value: "8002"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: aletheia, key: anthropic-api-key, optional: true }
+          readinessProbe: { httpGet: { path: /readyz, port: 8002 } }
+          livenessProbe: { httpGet: { path: /healthz, port: 8002 }, periodSeconds: 15 }
+          resources:
+            requests: { cpu: 200m, memory: 256Mi }
+            limits: { memory: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: verifier, namespace: aletheia }
+spec:
+  selector: { app: verifier }
+  ports: [{ port: 8003, name: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: verifier, namespace: aletheia }
+spec:
+  # The expected bottleneck. Replicating it is the one scaling lever that helps,
+  # because cross-encoding cost is per claim and cannot be batched across
+  # requests without adding queueing latency to the critical path.
+  replicas: 2
+  selector: { matchLabels: { app: verifier } }
+  template:
+    metadata:
+      labels: { app: verifier }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8003"
+    spec:
+      containers:
+        - name: verifier
+          # The models image: torch plus the NLI weights. Roughly 1.1 GB resident
+          # once loaded, and a pod OOM-killed mid-verification produces an
+          # abstention that looks like a corpus problem rather than an
+          # infrastructure one — hence the generous request.
+          image: ghcr.io/ceydaakin/aletheia-python:0.1.0-models
+          command: ["uvicorn", "aletheia.verifier.app:app", "--host", "0.0.0.0", "--port", "8003"]
+          ports: [{ containerPort: 8003 }]
+          envFrom: [{ configMapRef: { name: aletheia-config } }]
+          env:
+            - name: PORT
+              value: "8003"
+            - name: HF_HOME
+              value: /models
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8003 }
+            # Weights download on first start; failing readiness for two minutes
+            # is normal, and a tighter budget would crash-loop a healthy pod.
+            initialDelaySeconds: 20
+            failureThreshold: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8003 }
+            periodSeconds: 20
+          volumeMounts: [{ name: models, mountPath: /models }]
+          resources:
+            requests: { cpu: "1", memory: 2Gi }
+            limits: { memory: 4Gi }
+      volumes:
+        - name: models
+          persistentVolumeClaim: { claimName: model-cache }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: model-cache, namespace: aletheia }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 10Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: risk, namespace: aletheia }
+spec:
+  selector: { app: risk }
+  ports: [{ port: 8004, name: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: risk, namespace: aletheia }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: risk } }
+  template:
+    metadata:
+      labels: { app: risk }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8004"
+    spec:
+      containers:
+        - name: risk
+          image: ghcr.io/ceydaakin/aletheia-python:0.1.0
+          command: ["uvicorn", "aletheia.risk.app:app", "--host", "0.0.0.0", "--port", "8004"]
+          ports: [{ containerPort: 8004 }]
+          envFrom: [{ configMapRef: { name: aletheia-config } }]
+          env:
+            - name: PORT
+              value: "8004"
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: aletheia, key: database-url } }
+          readinessProbe: { httpGet: { path: /readyz, port: 8004 }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: 8004 }, periodSeconds: 15 }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ingestion, namespace: aletheia }
+spec:
+  selector: { app: ingestion }
+  ports: [{ port: 8005, name: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ingestion, namespace: aletheia }
+spec:
+  # Exactly one. The JetStream consumer is durable and shared, so extra replicas
+  # would compete for the same messages; ingestion is not on the request path and
+  # has nothing to gain from concurrency here.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: ingestion } }
+  template:
+    metadata:
+      labels: { app: ingestion }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8005"
+    spec:
+      containers:
+        - name: ingestion
+          image: ghcr.io/ceydaakin/aletheia-python:0.1.0
+          command: ["uvicorn", "aletheia.ingestion.app:app", "--host", "0.0.0.0", "--port", "8005"]
+          ports: [{ containerPort: 8005 }]
+          envFrom: [{ configMapRef: { name: aletheia-config } }]
+          env:
+            - name: PORT
+              value: "8005"
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: aletheia, key: database-url } }
+          readinessProbe: { httpGet: { path: /readyz, port: 8005 }, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /healthz, port: 8005 }, periodSeconds: 20 }
+          volumeMounts: [{ name: corpora, mountPath: /corpora, readOnly: true }]
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { memory: 2Gi }
+      volumes:
+        - name: corpora
+          persistentVolumeClaim: { claimName: corpora }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: corpora, namespace: aletheia }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 20Gi } }

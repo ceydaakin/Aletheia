@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ceydaakin/aletheia/gateway/internal/contract"
 	"github.com/ceydaakin/aletheia/gateway/internal/obs"
 	"github.com/ceydaakin/aletheia/gateway/internal/pipeline"
@@ -71,7 +73,7 @@ func (s *Server) handleAnswer(w http.ResponseWriter, r *http.Request) {
 		s.writePipelineError(w, r, err)
 		return
 	}
-	s.recordDecision(resp)
+	s.recordDecision(ctx, resp)
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -110,7 +112,7 @@ func (s *Server) answerStream(ctx context.Context, w http.ResponseWriter, r *htt
 		flusher.Flush()
 		return
 	}
-	s.recordDecision(resp)
+	s.recordDecision(ctx, resp)
 	writeSSE(w, pipeline.EventDone, map[string]string{"trace_id": resp.TraceID})
 	flusher.Flush()
 }
@@ -193,9 +195,29 @@ func (s *Server) writeThrottled(
 	writeError(w, r, http.StatusTooManyRequests, code, message)
 }
 
-func (s *Server) recordDecision(resp contract.AnswerResponse) {
+func (s *Server) recordDecision(ctx context.Context, resp contract.AnswerResponse) {
 	s.metrics.Inc(obs.MetricDecisions, "decision", string(resp.Decision))
 	if resp.Decision == contract.DecisionAbstain {
 		s.metrics.Inc(obs.MetricAbstentions, "reason", string(resp.AbstainReason))
+	}
+
+	// On the span, not only in the metrics. "Why did this particular request
+	// abstain" is the question traces get opened for, and answering it by
+	// joining against logs on a timestamp defeats the purpose of having traces.
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		obs.AttrDecision.String(string(resp.Decision)),
+		obs.AttrRiskBudget.Float64(resp.Risk.Budget),
+		obs.AttrStatistic.Float64(resp.Risk.Statistic),
+		obs.AttrThreshold.Float64(resp.Risk.Threshold),
+		obs.AttrChunks.Int(resp.Retrieval.RerankedTo),
+		obs.AttrClaims.Int(len(resp.Claims)),
+		obs.AttrDegraded.Bool(resp.Degraded),
+	)
+	if resp.AbstainReason != "" {
+		span.SetAttributes(obs.AttrAbstainReason.String(string(resp.AbstainReason)))
+	}
+	if resp.Risk.CalibrationID != "" {
+		span.SetAttributes(obs.AttrCalibrationID.String(resp.Risk.CalibrationID))
 	}
 }

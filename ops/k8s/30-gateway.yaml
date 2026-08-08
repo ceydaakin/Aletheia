@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: Service
+metadata: { name: gateway, namespace: aletheia }
+spec:
+  selector: { app: gateway }
+  ports: [{ port: 8080, name: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway, namespace: aletheia }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: gateway } }
+  strategy:
+    rollingUpdate: { maxUnavailable: 0 }
+  template:
+    metadata:
+      labels: { app: gateway }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      # Longer than the request budget, so a rolling update drains in-flight
+      # answers rather than turning them into dropped connections.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: gateway
+          image: ghcr.io/ceydaakin/aletheia-gateway:0.1.0
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: GATEWAY_ADDR
+              value: ":8080"
+            - name: RETRIEVAL_URL
+              value: http://retrieval:8001
+            - name: GENERATION_URL
+              value: http://generation:8002
+            - name: VERIFIER_URL
+              value: http://verifier:8003
+            - name: RISK_URL
+              value: http://risk:8004
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://tempo:4318
+            - name: GATEWAY_REQUEST_TIMEOUT_MS
+              value: "6000"
+            # The verifier stage budget is the one to watch: with the NLI backend
+            # it is the binding constraint, not a safety margin.
+            - name: GATEWAY_VERIFIER_TIMEOUT_MS
+              value: "1500"
+            # Per tenant, not per node: this bounds one tenant's blast radius.
+            # Replicas multiply it, which is intended — the node-level limit is
+            # the resource requests below.
+            - name: GATEWAY_RATE_LIMIT_PER_SECOND
+              value: "10"
+            - name: GATEWAY_RATE_LIMIT_BURST
+              value: "20"
+            - name: GATEWAY_MAX_CONCURRENT_PER_TENANT
+              value: "20"
+            - name: ALETHEIA_TENANTS
+              valueFrom: { secretKeyRef: { name: aletheia, key: tenants } }
+          readinessProbe:
+            # /readyz checks the four upstreams, so a gateway pod leaves the
+            # Service when the pipeline cannot serve — better than accepting a
+            # request in order to abstain on it.
+            httpGet: { path: /readyz, port: 8080 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 200m, memory: 64Mi }
+            limits: { memory: 256Mi }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+  namespace: aletheia
+  annotations:
+    # SSE: the answer streams provisional content before the decision event, and
+    # a buffering proxy would hold it all until the end, defeating the point.
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  rules:
+    - host: aletheia.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port: { number: 8080 }
+  tls:
+    - hosts: [aletheia.example.com]
+      secretName: aletheia-tls
+---
+# Calibration is a scheduled job, not a sidecar: it drives the whole pipeline
+# over a labelled dataset and writes one row. Running it beside a service would
+# tie its schedule to that service's lifecycle and give it a share of the request
+# path's resources.
+#
+# The cadence matters more than it looks. The risk controller refuses to serve a
+# calibration older than CALIBRATION_MAX_AGE_HOURS, so this schedule and that
+# threshold are the same decision written twice — if the job stops, the system
+# stops answering rather than quietly serving a stale bound.
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: calibrate, namespace: aletheia }
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: calibrate
+              image: ghcr.io/ceydaakin/aletheia-python:0.1.0-models
+              args:
+                - python
+                - -m
+                - aletheia.eval.calibrate
+                - --dataset=/corpora/datasets/bootstrap-tr
+                - --alpha=0.05
+              envFrom: [{ configMapRef: { name: aletheia-config } }]
+              env:
+                - name: VERIFIER_BACKEND
+                  value: "nli"
+                - name: DATABASE_URL
+                  valueFrom: { secretKeyRef: { name: aletheia, key: database-url } }
+                - name: HF_HOME
+                  value: /models
+              volumeMounts:
+                - { name: corpora, mountPath: /corpora, readOnly: true }
+                - { name: models, mountPath: /models }
+              resources:
+                requests: { cpu: "2", memory: 2Gi }
+                limits: { memory: 6Gi }
+          volumes:
+            - name: corpora
+              persistentVolumeClaim: { claimName: corpora }
+            - name: models
+              persistentVolumeClaim: { claimName: model-cache }

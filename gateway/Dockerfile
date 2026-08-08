@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.24-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
-# No external dependencies (ADR-0001), so there is no module download step and
-# the build is fully offline and reproducible.
-COPY go.mod ./
+# Dependencies first so a source-only change reuses the cached module layer.
+# The gateway was dependency-free until week 10, when ADR-0001's deferred
+# OpenTelemetry SDK landed; that is still the only external dependency tree.
+COPY go.mod go.sum ./
+RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/gateway ./cmd/gateway

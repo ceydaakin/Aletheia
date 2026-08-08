@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/codes"
+
 	"github.com/ceydaakin/aletheia/gateway/internal/contract"
 	"github.com/ceydaakin/aletheia/gateway/internal/obs"
 	"github.com/ceydaakin/aletheia/gateway/internal/upstream"
@@ -171,8 +173,16 @@ func (p *Pipeline) Run(ctx context.Context, in Input, emit EmitFunc) (contract.A
 	return resp, nil
 }
 
-// call runs one upstream stage and records its latency and outcome.
+// call runs one upstream stage, recording its latency, outcome, and span.
+//
+// One span per stage is what makes the PRD's required trace — retrieval →
+// generation → verification → decision — readable: the question a trace gets
+// opened for is "which stage turned this into an abstention", and that is
+// answerable only if each stage is separately visible.
 func (p *Pipeline) call(ctx context.Context, c *upstream.Client, path string, in, out any) error {
+	ctx, span := obs.StartSpan(ctx, "aletheia.stage."+c.Name())
+	defer span.End()
+
 	start := time.Now()
 	err := c.Post(ctx, path, in, out)
 	p.metrics.Observe(obs.MetricStageLatency, time.Since(start).Seconds(), "stage", c.Name())
@@ -183,6 +193,8 @@ func (p *Pipeline) call(ctx context.Context, c *upstream.Client, path string, in
 			kind = "timeout"
 		}
 		p.metrics.Inc(obs.MetricStageErrors, "stage", c.Name(), "kind", kind)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, kind)
 	}
 	return err
 }

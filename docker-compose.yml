@@ -63,6 +63,9 @@ services:
     command: ["uvicorn", "aletheia.retrieval.app:app", "--host", "0.0.0.0", "--port", "8001"]
     environment:
       PORT: 8001
+      # Empty by default: the propagator is still installed so trace context
+      # flows, but nothing is exported until a collector exists (--profile obs).
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-}
     ports:
       - "8001:8001"
     healthcheck: *py-health
@@ -72,6 +75,9 @@ services:
     command: ["uvicorn", "aletheia.generation.app:app", "--host", "0.0.0.0", "--port", "8002"]
     environment:
       PORT: 8002
+      # Empty by default: the propagator is still installed so trace context
+      # flows, but nothing is exported until a collector exists (--profile obs).
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-}
     ports:
       - "8002:8002"
     healthcheck: *py-health
@@ -81,6 +87,9 @@ services:
     command: ["uvicorn", "aletheia.verifier.app:app", "--host", "0.0.0.0", "--port", "8003"]
     environment:
       PORT: 8003
+      # Empty by default: the propagator is still installed so trace context
+      # flows, but nothing is exported until a collector exists (--profile obs).
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-}
     ports:
       - "8003:8003"
     healthcheck: *py-health
@@ -90,6 +99,9 @@ services:
     command: ["uvicorn", "aletheia.risk.app:app", "--host", "0.0.0.0", "--port", "8004"]
     environment:
       PORT: 8004
+      # Empty by default: the propagator is still installed so trace context
+      # flows, but nothing is exported until a collector exists (--profile obs).
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-}
     ports:
       - "8004:8004"
     healthcheck: *py-health
@@ -99,6 +111,9 @@ services:
     command: ["uvicorn", "aletheia.ingestion.app:app", "--host", "0.0.0.0", "--port", "8005"]
     environment:
       PORT: 8005
+      # Empty by default: the propagator is still installed so trace context
+      # flows, but nothing is exported until a collector exists (--profile obs).
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-}
     ports:
       - "8005:8005"
     volumes:
@@ -131,6 +146,8 @@ services:
       GATEWAY_RATE_LIMIT_PER_SECOND: ${GATEWAY_RATE_LIMIT_PER_SECOND:-10}
       GATEWAY_RATE_LIMIT_BURST: ${GATEWAY_RATE_LIMIT_BURST:-20}
       GATEWAY_MAX_CONCURRENT_PER_TENANT: ${GATEWAY_MAX_CONCURRENT_PER_TENANT:-20}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
     ports:
       - "8080:8080"
     depends_on:
@@ -155,6 +172,18 @@ services:
       - "9090:9090"
     restart: unless-stopped
 
+  tempo:
+    image: grafana/tempo:2.6.1
+    profiles: ["obs"]
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./ops/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4318:4318"
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:11.3.0
     profiles: ["obs"]
@@ -174,3 +203,4 @@ volumes:
   pgdata:
   natsdata:
   grafanadata:
+  tempodata:

@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: aletheia
+
+resources:
+  - 00-namespace.yaml
+  - 10-stateful.yaml
+  - 20-services.yaml
+  - 30-gateway.yaml
+
+# Migrations ship as a ConfigMap so Postgres runs them from its init hook on a
+# fresh volume. Generated rather than checked in as a manifest so the SQL has one
+# home: db/migrations is what CI applies and what `make testdb` applies, and a
+# second copy would drift.
+configMapGenerator:
+  - name: aletheia-migrations
+    files:
+      - ../../db/migrations/0001_init.sql
+      - ../../db/migrations/0002_ingestion.sql
+      - ../../db/migrations/0003_retrieval.sql
+
+# The secret is created out of band; see secret.example.yaml.

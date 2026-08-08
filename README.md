@@ -228,7 +228,8 @@ data. But on `bootstrap-tr` it correctly certifies *nothing* — 27 queries is f
 | `db/migrations/` | SQL migrations. The bitemporal chunk store lives here. |
 | `python/src/aletheia/eval/` | Metrics and the evaluation harness. A tool, not a service, so it may import from what it measures. |
 | `eval/datasets/` | Labelled corpora. Gold labels name documents, not chunk ids, so they survive a chunking change. |
-| `docs/` | PRD and ADRs. |
+| `docs/` | PRD, ADRs, and the technical report. |
+| `ops/k8s/` | k3s manifests. Secrets are created out of band; see `secret.example.yaml`. |
 | `ops/` | Prometheus/Grafana config; k3s manifests land here in week 10. |
 
 ## Development
@@ -274,11 +275,11 @@ including `tenants`.
 | 5 | Cited generation + claim decomposer |
 | 6 | Verifier integration |
 | 7 | **Risk controller + calibration — critical path** |
-| 8 | Go gateway hardening, SSE, timeout/fallback |
-| 9 | TR corpus + cross-lingual calibration experiment |
-| 10 | k3s deployment, OTel, Grafana |
-| 11 | Ablations + final result tables |
-| 12 | Technical report, demo video, blog post |
+| 8 | **Go gateway hardening, admission control, p95 measured — done** |
+| 9 | TR corpus + cross-lingual calibration — blocked on eval-set size |
+| 10 | **k3s deployment, OTel, Grafana — done** |
+| 11 | Ablations + final result tables — blocked on eval-set size |
+| 12 | **Technical report + blog post — done; demo video outstanding** |
 
 Week 7 is the critical path. If the schedule slips, the Turkish track (week 9) narrows;
 the risk controller never does.
@@ -295,3 +296,38 @@ see open question 4 in the PRD.
 ## License
 
 TBD before first public release.
+
+## Observability
+
+```bash
+OTLP_ENDPOINT=http://tempo:4318 OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318 \
+  docker compose --profile obs up -d
+```
+
+Grafana on :3000 (admin/admin) with a provisioned dashboard, Prometheus on :9090,
+Tempo on :3200. One request produces a single trace across all five services —
+gateway root span, one span per pipeline stage, and one server span per Python
+service. The root span carries the decision, the abstain reason, the risk
+statistic, and the calibration id, because "why did *this* request abstain" is the
+question traces get opened for.
+
+The response's `trace_id` **is** the OpenTelemetry trace id, so a user quoting it
+from a bad answer lands on the trace directly.
+
+The dashboard leads with answer rate and uncalibrated abstentions rather than
+error rate, because the characteristic failure of this design is a system that is
+up, fast, and returning nothing useful — every probe green, no errors, no answers.
+
+## Deployment
+
+`ops/k8s/` holds the k3s manifests (`kubectl apply -k ops/k8s`). Notable choices
+are documented in `ops/k8s/README.md`; the calibration job is a CronJob whose
+schedule and the controller's `CALIBRATION_MAX_AGE_HOURS` are the same decision
+written twice — if the job stops, the system stops answering rather than quietly
+serving a stale bound.
+
+## Writeup
+
+- [Technical report](docs/report/aletheia.md) — method, results, and a limitations
+  section that is longer than the results section on purpose.
+- [Blog post draft](docs/report/blog-post.md).

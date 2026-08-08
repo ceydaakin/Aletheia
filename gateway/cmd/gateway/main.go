@@ -26,6 +26,8 @@ func main() {
 	}
 }
 
+const version = "0.1.0"
+
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -34,6 +36,19 @@ func run() error {
 
 	log := obs.NewLogger(cfg.LogLevel)
 	metrics := obs.NewMetrics()
+
+	// Tracing is observability, not correctness: a collector that is down or
+	// unconfigured must never stop the gateway serving, so a failure here is
+	// logged and the process continues untraced.
+	shutdownTracing, err := obs.InitTracing(
+		context.Background(), cfg.OTLPEndpoint, "aletheia-gateway", version, cfg.TraceSampleRatio,
+	)
+	if err != nil {
+		log.Warn("tracing disabled", "error", err)
+		shutdownTracing = func(context.Context) error { return nil }
+	} else if cfg.OTLPEndpoint != "" {
+		log.Info("tracing enabled", "endpoint", cfg.OTLPEndpoint, "sample_ratio", cfg.TraceSampleRatio)
+	}
 
 	tenants, err := tenant.NewRegistry(cfg.TenantSpec)
 	if err != nil {
@@ -75,5 +90,12 @@ func run() error {
 	log.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.RequestTimeout+5*time.Second)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+
+	shutdownErr := srv.Shutdown(shutdownCtx)
+	// After the server, so spans from in-flight requests are recorded before the
+	// batch processor is flushed.
+	if err := shutdownTracing(shutdownCtx); err != nil {
+		log.Warn("tracing shutdown", "error", err)
+	}
+	return shutdownErr
 }

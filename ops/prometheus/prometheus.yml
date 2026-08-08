@@ -14,6 +14,10 @@ scrape_configs:
           - "generation:8002"
           - "verifier:8003"
           - "risk:8004"
+          # Ingestion is off the request path but its metrics are the drift
+          # signal: a burst of `amended` outcomes invalidates the exchangeability
+          # assumption the guarantee rests on (PRD §5.2).
+          - "ingestion:8005"
 
   # The panels that matter for this project are not the usual RED metrics:
   #   aletheia_gateway_decisions_total{decision="abstain"} / …_total

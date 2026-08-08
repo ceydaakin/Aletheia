@@ -8,16 +8,27 @@ import (
 	"github.com/ceydaakin/aletheia/gateway/internal/upstream"
 )
 
-// tracer assigns (or adopts) a trace id and echoes it back on the response, so a
-// user reporting a bad answer can hand us the exact request.
+// tracer adopts any inbound trace context, opens the server span, and settles on
+// the id echoed back to the client.
+//
+// The response's trace_id is the OTel trace id whenever tracing is on. A user
+// reporting a bad answer quotes that field, and it has to find the trace in the
+// collector — a second, unrelated identifier would make the field decorative.
+// With tracing off it falls back to a ULID so the field is never empty.
 func (s *Server) tracer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get(upstream.HeaderTraceID)
+		ctx := obs.Extract(r.Context(), r)
+		ctx, span := obs.StartSpan(ctx, "POST "+r.URL.Path)
+		defer span.End()
+
+		id := obs.TraceIDFromContext(ctx)
 		if id == "" {
-			id = obs.NewTraceID()
+			if id = r.Header.Get(upstream.HeaderTraceID); id == "" {
+				id = obs.NewTraceID()
+			}
 		}
 		w.Header().Set(upstream.HeaderTraceID, id)
-		next.ServeHTTP(w, r.WithContext(obs.WithTraceID(r.Context(), id)))
+		next.ServeHTTP(w, r.WithContext(obs.WithTraceID(ctx, id)))
 	})
 }
 

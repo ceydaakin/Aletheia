@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aletheia
+  labels:
+    app.kubernetes.io/part-of: aletheia
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aletheia-config
+  namespace: aletheia
+data:
+  # Model backends. The defaults are the cheap ones; see the note in
+  # eval/results/week8-latency.md before switching VERIFIER_BACKEND to nli on a
+  # CPU-only node — it costs seconds per response.
+  GENERATION_BACKEND: "extractive"
+  VERIFIER_BACKEND: "overlap"
+  EMBEDDING_BACKEND: "null"
+  RERANKER_BACKEND: "null"
+
+  SUPPORT_THRESHOLD: "0.5"
+  DEFAULT_RISK_BUDGET: "0.05"
+  RISK_CONFIDENCE: "0.95"
+  # Past this age a calibration no longer describes the corpus it was fitted on,
+  # and the risk controller abstains rather than quoting a bound it cannot stand
+  # behind (PRD §5.2).
+  CALIBRATION_MAX_AGE_HOURS: "168"
+
+  RETRIEVAL_LEXICAL_K: "50"
+  RETRIEVAL_DENSE_K: "50"
+  RETRIEVAL_RRF_K: "60"
+  RETRIEVAL_TOP_N: "6"
+
+  NATS_URL: "nats://nats:4222"
+  OTLP_ENDPOINT: "http://tempo:4318"
+
+  LOG_LEVEL: "info"

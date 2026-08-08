@@ -18,6 +18,8 @@ from fastapi import FastAPI, Request, Response
 
 from aletheia.metrics import registry
 from aletheia.settings import get_settings
+from aletheia.tracing import configure as configure_tracing
+from aletheia.tracing import context_from_headers, span
 
 HEADER_DEADLINE = "x-aletheia-deadline-ms"
 HEADER_TRACE_ID = "x-aletheia-trace-id"
@@ -83,6 +85,7 @@ def create_app(
     """
     settings = get_settings()
     configure_logging(settings.log_level)
+    configure_tracing(f"aletheia-{name}", settings.otlp_endpoint, sample_ratio=settings.trace_sample_ratio)
     log = logging.getLogger(name)
 
     app = FastAPI(title=f"aletheia-{name}", version="0.1.0", docs_url="/docs", lifespan=lifespan)
@@ -94,7 +97,11 @@ def create_app(
         request.state.trace_id = request.headers.get(HEADER_TRACE_ID, "")
         request.state.deadline_ms = deadline_ms(request)
 
-        response = await call_next(request)
+        # Continue the gateway's trace rather than starting a new one, or the
+        # pipeline appears in the collector as unrelated fragments.
+        parent = context_from_headers(request.headers)
+        with span(f"{name} {request.url.path}", parent):
+            response = await call_next(request)
 
         elapsed = time.perf_counter() - start
         if request.url.path not in ("/healthz", "/metrics"):

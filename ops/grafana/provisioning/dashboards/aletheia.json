@@ -1,0 +1,227 @@
+{
+  "uid": "aletheia-overview",
+  "title": "Aletheia — risk and latency",
+  "tags": ["aletheia"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "description": "The panels are ordered by what would make you intervene. Answer rate and uncalibrated abstentions come first because they are product failures that no error rate would reveal: the system is up, fast, and returning nothing useful.",
+  "panels": [
+    {
+      "type": "row",
+      "title": "Is the product working?",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Answer rate",
+      "description": "Fraction of requests that returned an answer rather than abstaining. PRD G2 targets >= 70% at alpha=0.05. A healthy-looking system with a collapsed answer rate is the characteristic failure of this design — every probe is green and users get nothing.",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.5 },
+              { "color": "green", "value": 0.7 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(rate(aletheia_gateway_decisions_total{decision!=\"abstain\"}[5m])) / clamp_min(sum(rate(aletheia_gateway_decisions_total[5m])), 0.0001)",
+          "legendFormat": "answer rate"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Abstentions we caused",
+      "description": "stale_calibration means no certified, fresh threshold was available — the system declining because of us, not because the corpus lacked an answer. Should be zero. A non-zero value means the calibration job has stopped running or its output has aged out.",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.001 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum(rate(aletheia_gateway_abstentions_total{reason=\"stale_calibration\"}[5m]))",
+          "legendFormat": "stale calibration"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Decisions",
+      "description": "answer / answer_with_flags / abstain over time. A shift towards abstain without a deploy usually means the corpus changed under a threshold fitted to the old one.",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 30, "stacking": { "mode": "normal" } } } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (decision) (rate(aletheia_gateway_decisions_total[5m]))",
+          "legendFormat": "{{decision}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Why we abstained",
+      "description": "insufficient_evidence and out_of_corpus are the corpus talking. stale_calibration and any spike correlated with a deploy are us.",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20 } } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (reason) (rate(aletheia_gateway_abstentions_total[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Degraded responses",
+      "description": "Responses where the guarantee could not be established as stated. These are correct behaviour, not errors — but a rising line means a dependency is failing and the product is quietly getting less useful.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (stage, kind) (rate(aletheia_gateway_stage_errors_total[5m]))",
+          "legendFormat": "{{stage}} / {{kind}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Latency",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }
+    },
+    {
+      "type": "timeseries",
+      "title": "End-to-end latency (p50 / p95)",
+      "description": "PRD 4.2: p50 <= 1.8s, p95 <= 3.5s including the verifier. Measured at 84ms / 182ms with the overlap verifier; the NLI verifier costs seconds per response and is the open problem (eval/results/week8-latency.md).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 3.5 }
+            ]
+          },
+          "custom": { "thresholdsStyle": { "mode": "line" } }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(aletheia_gateway_request_duration_seconds_bucket{path=\"/v1/answer\"}[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(aletheia_gateway_request_duration_seconds_bucket{path=\"/v1/answer\"}[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 by stage",
+      "description": "Which stage owns the tail. Retrieval and the verifier are the two that move; the verifier is expected to dominate once NLI is enabled.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(aletheia_gateway_stage_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Load and admission",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Throughput by status class",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (status) (rate(aletheia_gateway_requests_total{path=\"/v1/answer\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Throttled requests",
+      "description": "Rate limiting and the concurrency cap are reported separately because they need different client-side fixes. Sustained throttling of one tenant is working as intended; throttling across all tenants means the limits are too tight for real traffic.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (reason) (rate(aletheia_gateway_throttled_total[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Corpus",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingestion outcomes",
+      "description": "created / amended / corrected / unchanged. A sync that reports mostly 'unchanged' is healthy — it means content hashing is doing its job and no false corpus drift is being manufactured. A burst of 'amended' invalidates the exchangeability assumption the guarantee rests on.",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 32 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (outcome) (rate(aletheia_ingest_documents_total[15m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Retrieval results per arm",
+      "description": "Lexical and dense fail in uncorrelated ways (ADR-0006). An arm flatlining at zero while the other keeps working is the failure mode hybrid retrieval exists to survive — and the one no error rate would show.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 32 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "sum by (arm) (rate(aletheia_retrieval_arm_results[5m]))",
+          "legendFormat": "{{arm}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

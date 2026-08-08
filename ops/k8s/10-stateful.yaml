@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: aletheia
+spec:
+  clusterIP: None
+  selector: { app: postgres }
+  ports: [{ port: 5432, name: postgres }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: aletheia
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          env:
+            - name: POSTGRES_USER
+              value: aletheia
+            - name: POSTGRES_DB
+              value: aletheia
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: aletheia, key: postgres-password }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            # Migrations run on first initialisation only. Re-running them on an
+            # existing volume is a no-op because Postgres skips the init hook,
+            # which is why `make migrate` exists for the upgrade path.
+            - { name: migrations, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "aletheia", "-d", "aletheia"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 2Gi }
+      volumes:
+        - name: migrations
+          configMap: { name: aletheia-migrations }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 20Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: aletheia
+spec:
+  selector: { app: nats }
+  ports:
+    - { port: 4222, name: client }
+    - { port: 8222, name: monitor }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+  namespace: aletheia
+spec:
+  serviceName: nats
+  replicas: 1
+  selector:
+    matchLabels: { app: nats }
+  template:
+    metadata:
+      labels: { app: nats }
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10-alpine
+          # JetStream with a persistent store: ingestion needs at-least-once
+          # delivery with per-document ack so a crash mid-corpus resumes rather
+          # than restarts.
+          args: ["-js", "-sd", "/data", "-m", "8222"]
+          ports:
+            - { containerPort: 4222 }
+            - { containerPort: 8222 }
+          volumeMounts: [{ name: data, mountPath: /data }]
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8222 }
+            initialDelaySeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 5Gi } }

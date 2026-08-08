@@ -12,6 +12,11 @@ class Settings(BaseSettings):
 
     log_level: str = "info"
 
+    # Tracing. Empty endpoint installs the propagator but exports nothing, so
+    # trace context still flows downstream. See aletheia.tracing.
+    otlp_endpoint: str = ""
+    trace_sample_ratio: float = 1.0
+
     database_url: str = "postgresql://aletheia:aletheia@postgres:5432/aletheia"
     nats_url: str = "nats://nats:4222"
     nats_ingest_stream: str = "aletheia-ingest"

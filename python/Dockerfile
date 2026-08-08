@@ -14,7 +14,8 @@ WORKDIR /app
 # Dependencies first so a source-only change does not re-resolve the world.
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+# The otel extra is small and pure-Python; the cut that matters is model weights.
+RUN pip install --no-cache-dir ".[otel]"
 
 RUN useradd --create-home --uid 10001 aletheia
 USER aletheia
