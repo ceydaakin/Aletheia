@@ -32,125 +32,40 @@ import asyncio
 import json
 import sys
 import uuid
-from dataclasses import dataclass
 from pathlib import Path
 
-from aletheia.contracts import Claim, ClaimStatus, Mode
+from aletheia.contracts import Mode
 from aletheia.db import Database, configure_event_loop
-from aletheia.embedding import NullEmbedder, get_embedder
-from aletheia.eval.dataset import Dataset, Query, load
+from aletheia.embedding import get_embedder
+from aletheia.eval import records as records_io
+from aletheia.eval.collect import collect_one
+from aletheia.eval.dataset import Dataset, load
+from aletheia.eval.observations import LOSS_SOURCES, Observation, observe_all
 from aletheia.eval.retrieval import TENANT_PREFIX, doc_chunks, ensure_tenant, ingest_corpus
-from aletheia.generation.providers import build_answer, get_generator
-from aletheia.retrieval.search import dense_search, lexical_search, reciprocal_rank_fusion
+from aletheia.generation.providers import get_generator
+from aletheia.retrieval.rerank import get_reranker
 from aletheia.risk import ltt, store
-from aletheia.risk.statistic import (
-    STATISTIC_NAME,
-    apply_action_policy,
-    response_loss,
-    risk_statistic,
-)
+from aletheia.risk.statistic import STATISTIC_NAME
 from aletheia.service import configure_logging
-from aletheia.settings import Settings, get_settings
-from aletheia.verifier.nli import get_scorer
+from aletheia.settings import get_settings
+from aletheia.verifier.nli import NLIScorer, get_scorer
+
+__all__ = [
+    "GRID",
+    "Observation",
+    "candidates",
+    "evaluate_at",
+    "risk_coverage_curve",
+    "split",
+]
 
 # Lambda grid. Fine enough that the chosen threshold is not an artefact of the
 # spacing, coarse enough that the Bonferroni correction stays affordable — every
 # extra point raises the bar each candidate has to clear.
 GRID = tuple(round(0.02 * i, 2) for i in range(1, 51))
 
-
-@dataclass(frozen=True)
-class Observation:
-    """One labelled response."""
-
-    query_id: str
-    query: str
-    answer: str
-    statistic: float
-    loss: bool
-    """True if the response contains an unsupported claim."""
-    answered: bool
-    """False when the pipeline produced nothing to return regardless of threshold."""
-
-
-async def observe(
-    db: Database,
-    tenant_id: str,
-    query: Query,
-    *,
-    settings: Settings,
-    generator,
-    scorer,
-    embedder,
-    mode: Mode,
-) -> Observation:
-    """Run one query end to end and label the response."""
-    async with db.connection() as conn:
-        arms = {
-            "lexical": await lexical_search(
-                conn, tenant_id, query.text, k=settings.retrieval_lexical_k, lang=query.lang
-            )
-        }
-        if not isinstance(embedder, NullEmbedder):
-            vectors = embedder.embed([query.text])
-            if vectors and vectors[0] is not None:
-                arms["dense"] = await dense_search(
-                    conn, tenant_id, vectors[0], k=settings.retrieval_dense_k
-                )
-
-    fused = reciprocal_rank_fusion(arms, k=settings.retrieval_rrf_k)
-    chunks = [f.candidate for f in fused[: settings.retrieval_top_n]]
-    from aletheia.contracts import Chunk
-
-    retrieved = [
-        Chunk(
-            chunk_id=c.chunk_id, doc_id=c.doc_id, version=c.version,
-            title=c.title, text=c.text, score=0.0,
-        )
-        for c in chunks
-    ]
-
-    answer, drafts = build_answer(
-        generator, query.text, retrieved, max_claims=settings.generation_max_claims
-    )
-    if not drafts:
-        return Observation(query.id, query.text, "", 1.0, False, answered=False)
-
-    by_id = {c.chunk_id: c for c in retrieved}
-    pairs, indices = [], []
-    for index, draft in enumerate(drafts):
-        premise = "\n\n".join(by_id[c].text for c in draft.citations if c in by_id)
-        if premise:
-            pairs.append((premise, draft.text))
-            indices.append(index)
-
-    scores = [0.0] * len(drafts)
-    for index, score in zip(indices, scorer.score(pairs) if pairs else [], strict=True):
-        scores[index] = float(score)
-
-    verified = [
-        Claim(
-            text=d.text,
-            citations=d.citations,
-            support_score=round(s, 4),
-            status=(
-                ClaimStatus.SUPPORTED
-                if s >= settings.support_threshold
-                else ClaimStatus.UNSUPPORTED
-            ),
-        )
-        for d, s in zip(drafts, scores, strict=True)
-    ]
-
-    edited = apply_action_policy(verified, mode)
-    return Observation(
-        query_id=query.id,
-        query=query.text,
-        answer=answer,
-        statistic=risk_statistic(edited),
-        loss=response_loss(edited),
-        answered=True,
-    )
+# How each loss source is recorded in calibration_examples.label_source.
+LABEL_SOURCE = {"gold": "synthetic", "verifier": "verifier"}
 
 
 def candidates(observations: list[Observation], grid=GRID) -> list[ltt.LambdaCandidate]:
@@ -230,55 +145,81 @@ def split(
     return calibration, test
 
 
+async def _collect(args, dataset: Dataset, db: Database, tenant_id: str, settings) -> list:
+    """Run the pipeline now, the same way :mod:`aletheia.eval.collect` does."""
+    generator = get_generator(settings)
+    embedder = get_embedder(settings)
+    reranker = get_reranker(settings)
+    nli = None
+    if args.variant.startswith("nli"):
+        scorer = get_scorer(settings.model_copy(update={"verifier_backend": "nli"}))
+        assert isinstance(scorer, NLIScorer)
+        nli = scorer
+    print(
+        f"\nbackends: generation={generator.name} verifier={args.variant} "
+        f"embedding={embedder.name} hallucination_rate={args.rate}"
+    )
+    out = []
+    for index, query in enumerate(dataset.queries, start=1):
+        out.append(
+            await collect_one(
+                db, tenant_id, query, settings=settings, generator=generator,
+                embedder=embedder, reranker=reranker, nli=nli, variants=(args.variant,),
+                rate=args.rate, seed=args.seed,
+            )
+        )
+        if index % 25 == 0:
+            print(f"  {index}/{len(dataset.queries)}", flush=True)
+    return out
+
+
 async def run(args: argparse.Namespace) -> int:
     settings = get_settings()
     configure_logging("warning")
 
-    dataset: Dataset = load(Path(args.dataset))
-    tenant_id = TENANT_PREFIX + dataset.name
+    dataset: Dataset = load(Path(args.dataset), verified_only=args.verified_only)
+    tenant_id = args.tenant or TENANT_PREFIX + dataset.name
     mode = Mode(args.mode)
 
     db = Database(args.database_url or settings.database_url)
     await db.open()
     try:
         await ensure_tenant(db, tenant_id)
-        if args.ingest:
-            count = await ingest_corpus(db, dataset, tenant_id, settings)
-            print(f"corpus: {count} document(s)")
-        if not await doc_chunks(db, tenant_id):
-            print(f"no chunks for {tenant_id!r}; run with --ingest", file=sys.stderr)
-            return 2
+        if args.records:
+            meta, responses = records_io.read(Path(args.records))
+            if meta["dataset"] != dataset.name:
+                print(f"{args.records} is for {meta['dataset']!r}, not {dataset.name!r}",
+                      file=sys.stderr)
+                return 2
+            print(f"\nrecords: {args.records} ({len(responses)} responses, "
+                  f"hallucination_rate={meta['hallucination_rate']}, "
+                  f"generation={meta['generation']})")
+        else:
+            if args.ingest:
+                count = await ingest_corpus(db, dataset, tenant_id, settings)
+                print(f"corpus: {count} document(s)")
+            if not await doc_chunks(db, tenant_id):
+                print(f"no chunks for {tenant_id!r}; run with --ingest", file=sys.stderr)
+                return 2
+            responses = await _collect(args, dataset, db, tenant_id, settings)
+            meta = {"hallucination_rate": args.rate, "generation": settings.generation_backend}
 
-        generator = get_generator(settings)
-        scorer = get_scorer(settings)
-        embedder = get_embedder(settings)
-
-        print(
-            f"\nbackends: generation={generator.name} verifier={scorer.name} "
-            f"embedding={embedder.name} mode={mode.value}"
-        )
-        if generator.name == "extractive":
+        if args.loss == "gold" and not meta["hallucination_rate"]:
             print(
-                "NOTE: extractive generation cannot hallucinate, so the loss below\n"
-                "      reflects retrieval quality and verifier strictness, not\n"
-                "      unsupported generation. This bound does not transfer to a\n"
-                "      generative system."
+                "NOTE: gold loss with no injected hallucinations. Extractive claims are\n"
+                "      supported by construction, so every loss is zero and the bound\n"
+                "      says nothing. Use --rate > 0."
+            )
+        if args.loss == "verifier":
+            print(
+                "NOTE: loss from the verifier itself — the bound is conditional on the\n"
+                "      verifier being right (report §7.3)."
             )
 
-        queries = list(dataset.queries)
-        print(f"\nrunning {len(queries)} queries...")
-        observations = []
-        for index, query in enumerate(queries, start=1):
-            observations.append(
-                await observe(
-                    db, tenant_id, query,
-                    settings=settings, generator=generator, scorer=scorer,
-                    embedder=embedder, mode=mode,
-                )
-            )
-            if index % 10 == 0:
-                print(f"  {index}/{len(queries)}", flush=True)
-
+        observations = observe_all(
+            responses, variant=args.variant, mode=mode,
+            support_threshold=settings.support_threshold, loss=args.loss,
+        )
         calibration_set, test_set = split(observations, args.calibration_fraction)
         selection = ltt.select(
             candidates(calibration_set), n=len(calibration_set),
@@ -297,11 +238,13 @@ async def run(args: argparse.Namespace) -> int:
                 corpus_known_at=corpus_known_at,
                 statistic_name=STATISTIC_NAME,
                 lang=dataset.lang,
+                loss_source=args.loss,
+                hallucination_rate=float(meta["hallucination_rate"] or 0.0),
             )
             await store.save_examples(
                 conn, calibration_id,
                 [
-                    (o.query, o.answer, o.statistic, o.loss, "verifier",
+                    (o.query, o.answer, o.statistic, o.loss, LABEL_SOURCE[args.loss],
                      "calibration" if o in calibration_set else "test")
                     for o in observations
                 ],
@@ -355,11 +298,10 @@ async def run(args: argparse.Namespace) -> int:
                     {
                         "calibration_id": calibration_id,
                         "alpha": args.alpha,
-                        "backends": {
-                            "generation": generator.name,
-                            "verifier": scorer.name,
-                            "embedding": embedder.name,
-                        },
+                        "loss": args.loss,
+                        "variant": args.variant,
+                        "mode": mode.value,
+                        "records_meta": meta,
                         "calibration": risk_coverage_curve(calibration_set),
                         "test": risk_coverage_curve(test_set),
                     },
@@ -380,6 +322,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--delta", type=float, default=0.05, help="1 - confidence")
     parser.add_argument("--mode", default="strict", choices=[m.value for m in Mode])
     parser.add_argument("--ingest", action="store_true")
+    parser.add_argument(
+        "--records", default="",
+        help="read responses from an aletheia.eval.collect file instead of running the pipeline",
+    )
+    parser.add_argument(
+        "--loss", default="gold", choices=LOSS_SOURCES,
+        help="gold: injected hallucinations (verifier-independent); verifier: the verifier's own label",
+    )
+    parser.add_argument("--variant", default="nli", help="verifier variant that scores claims")
+    parser.add_argument("--rate", type=float, default=0.15, help="per-claim corruption rate")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--tenant", default="", help="store the calibration for this tenant")
+    parser.add_argument("--verified-only", action="store_true")
     parser.add_argument("--calibration-id", default="")
     parser.add_argument(
         "--calibration-fraction", type=float, default=0.5,

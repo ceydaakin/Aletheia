@@ -62,10 +62,11 @@ eval-retrieval: ## Measure retrieval: make eval-retrieval DATASET=../eval/datase
 	cd python && $(PY) -m aletheia.eval.retrieval --dataset $(DATASET) --ingest
 
 .PHONY: calibrate
-calibrate: ## Fit and certify a threshold: make calibrate DATASET=../eval/datasets/bootstrap-tr ALPHA=0.05
-	cd python && VERIFIER_BACKEND=nli $(PY) -m aletheia.eval.calibrate \
-		--dataset $(DATASET) --alpha $(or $(ALPHA),0.05) \
-		--curve ../eval/results/$(notdir $(DATASET))-curve.json
+calibrate: ## Certify a threshold from records: make calibrate DATASET=kvkk-tr ALPHA=0.05
+	cd python && $(PY) -m aletheia.eval.calibrate \
+		--dataset ../eval/datasets/$(DATASET) --records ../eval/results/records/$(DATASET).jsonl \
+		--alpha $(or $(ALPHA),0.05) --calibration-fraction 0.6 \
+		--curve ../eval/results/$(DATASET)-curve.json
 
 .PHONY: test-slow
 test-slow: ## Run the model-backed tests (downloads weights, minutes on CPU)
@@ -100,9 +101,43 @@ lint: ## Lint Go and Python sources
 
 # --- Evaluation ----------------------------------------------------------
 
+# The full-system configuration every headline number is measured under.
+MODELS_ENV = EMBEDDING_BACKEND=sentence-transformers RERANKER_BACKEND=cross-encoder \
+	VERIFIER_DEVICE=$(or $(DEVICE),auto) VERIFIER_MAX_LENGTH=512 DATABASE_URL=$(DATABASE_URL)
+DATASETS ?= kvkk-tr kvkk-en en-public
+
+.PHONY: corpora
+corpora: ## Re-fetch the public corpora (KVKK TR/EN, Wikipedia, arXiv)
+	$(PY) scripts/fetch_kvkk.py
+	$(PY) scripts/fetch_en_public.py
+
+.PHONY: collect
+collect: ## Run the pipeline once per dataset and cache responses: make collect DATASETS=kvkk-tr
+	cd python && for d in $(DATASETS); do \
+		$(MODELS_ENV) $(PY) -m aletheia.eval.collect --dataset ../eval/datasets/$$d --ingest \
+			--out ../eval/results/records/$$d.jsonl || exit 1; \
+	done
+
+.PHONY: collect-ablations
+collect-ablations: ## Records for the reranker ablation and the hallucination-rate sweep
+	cd python && for d in $(DATASETS); do \
+		$(MODELS_ENV) RERANKER_BACKEND=null $(PY) -m aletheia.eval.collect --dataset ../eval/datasets/$$d --verifiers nli \
+			--out ../eval/results/records/$$d__no-rerank.jsonl || exit 1; \
+	done
+	cd python && for d in $(or $(RATE_DATASETS),kvkk-tr); do for r in 0.05 0.30; do \
+		$(MODELS_ENV) $(PY) -m aletheia.eval.collect --dataset ../eval/datasets/$$d --rate $$r \
+			--verifiers nli --out ../eval/results/records/$$d__rate$$r.jsonl || exit 1; \
+	done; done
+
 .PHONY: eval
-eval: ## Run the evaluation harness (seeded, cached)
-	cd eval && $(PY) -m aletheia_eval.run --config configs/default.yaml
+eval: ## Every result table, from cached records (no models): writes eval/results/experiments.md
+	cd python && $(PY) -m aletheia.eval.experiments --records-dir ../eval/results/records \
+		--out-dir ../eval/results
+
+.PHONY: review
+review: ## Verify drafted queries by hand: make review DATASET=kvkk-tr PARALLEL=kvkk-en
+	cd python && $(PY) -m aletheia.eval.review --dataset ../eval/datasets/$(DATASET) \
+		$(if $(PARALLEL),--parallel ../eval/datasets/$(PARALLEL))
 
 .PHONY: loadtest
 loadtest: ## Measure end-to-end latency: make loadtest C=20 N=400

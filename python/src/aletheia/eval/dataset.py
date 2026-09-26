@@ -20,6 +20,11 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+DRAFT = "draft"
+VERIFIED = "verified"
+REJECTED = "rejected"
+STATUSES = (DRAFT, VERIFIED, REJECTED)
+
 
 @dataclass(frozen=True)
 class Query:
@@ -32,6 +37,14 @@ class Query:
     the correct outcome (PRD §7.1, TR-Adversarial)."""
     category: str = "answerable"
     note: str = ""
+    evidence: tuple[str, ...] = ()
+    """Verbatim passages from the relevant documents that answer the query.
+    Finer than ``relevant_docs`` — a statute is one document with dozens of
+    provisions — and checked against the corpus at load time."""
+    answer: str = ""
+    status: str = VERIFIED
+    """``draft`` until a person has checked the query, its answer and its
+    evidence; ``verified`` after. Hand-written sets default to verified."""
 
     @property
     def answerable(self) -> bool:
@@ -56,8 +69,16 @@ class Dataset:
     def unanswerable(self) -> list[Query]:
         return [q for q in self.queries if not q.answerable]
 
+    def status_counts(self) -> dict[str, int]:
+        counts = dict.fromkeys(STATUSES, 0)
+        for query in self.queries:
+            counts[query.status] += 1
+        return counts
 
-def load(root: Path) -> Dataset:
+
+def load(root: Path, *, verified_only: bool = False) -> Dataset:
+    """Load a dataset. Rejected queries are always dropped; drafts are kept
+    unless ``verified_only`` — every report states which it used."""
     # Resolved so that corpus paths can become file:// URIs regardless of where
     # the harness was invoked from.
     root = Path(root).resolve()
@@ -71,8 +92,19 @@ def load(root: Path) -> Dataset:
             relevant_docs=tuple(q.get("relevant_docs", ())),
             category=q.get("category", "answerable" if q.get("relevant_docs") else "unanswerable"),
             note=q.get("note", ""),
+            evidence=tuple(q.get("evidence", ())),
+            answer=q.get("answer", ""),
+            status=q.get("status", VERIFIED),
         )
         for q in manifest["queries"]
+    )
+
+    for query in queries:
+        if query.status not in STATUSES:
+            raise ValueError(f"{root}: query {query.id!r} has unknown status {query.status!r}")
+    queries = tuple(
+        q for q in queries
+        if q.status != REJECTED and (q.status == VERIFIED or not verified_only)
     )
 
     seen: set[str] = set()
@@ -89,6 +121,7 @@ def load(root: Path) -> Dataset:
         queries=queries,
     )
     _check_labels_resolve(dataset)
+    _check_evidence_is_verbatim(dataset)
     return dataset
 
 
@@ -115,4 +148,44 @@ def _check_labels_resolve(dataset: Dataset) -> None:
         raise ValueError(
             f"{dataset.name}: gold labels name documents that are not in the corpus: "
             + ", ".join(sorted(missing))
+        )
+
+
+def normalise(text: str) -> str:
+    """Whitespace- and case-insensitive form used for evidence matching.
+
+    Extraction reflows lines, so an exact byte match would reject a quote that
+    is textually identical; nothing looser is accepted.
+    """
+    return " ".join(text.split()).casefold()
+
+
+def _check_evidence_is_verbatim(dataset: Dataset) -> None:
+    """Every evidence quote must appear verbatim in one of its relevant documents.
+
+    Drafted evidence that paraphrases the source is the most likely defect in a
+    machine-drafted set, and it would silently turn "retrieved the evidence"
+    into "retrieved something similar". It fails loudly here instead.
+    """
+    if not dataset.corpus_dir.is_dir():
+        return
+    cache: dict[str, str] = {}
+
+    def text_of(doc: str) -> str:
+        if doc not in cache:
+            cache[doc] = normalise(
+                (dataset.corpus_dir / doc).read_text(encoding="utf-8", errors="ignore")
+            )
+        return cache[doc]
+
+    bad = [
+        f"{query.id}: {quote[:60]!r}"
+        for query in dataset.queries
+        for quote in query.evidence
+        if not any(normalise(quote) in text_of(doc) for doc in query.relevant_docs)
+    ]
+    if bad:
+        raise ValueError(
+            f"{dataset.name}: evidence not found verbatim in the relevant documents:\n  "
+            + "\n  ".join(bad)
         )

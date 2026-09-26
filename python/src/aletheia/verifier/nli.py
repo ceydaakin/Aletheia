@@ -93,8 +93,10 @@ class NLIScorer:
         batch_size: int = 16,
         max_length: int = 512,
         quantize: bool = False,
+        device: str = "cpu",
     ) -> None:
         self.model_name = model_name
+        self.device = device
         self.batch_size = batch_size
         # Premises are single cited chunks, which are ~1200 characters by the
         # chunking config — well under 512 tokens. Lowering this is the cheapest
@@ -127,6 +129,9 @@ class NLIScorer:
                     f"(has {sorted(labels)}); it is not an NLI checkpoint"
                 )
             self._entail_index = labels["entailment"]
+            self.device = _resolve_device(self.device, torch)
+            if self.device != "cpu":
+                model = model.to(self.device)
             self._pipeline = (tokenizer, model, torch)
         return self._pipeline
 
@@ -176,11 +181,75 @@ class NLIScorer:
                     padding=True,
                     max_length=self.max_length,
                     return_tensors="pt",
-                )
+                ).to(self.device)
                 logits = model(**encoded).logits
                 probabilities = torch.softmax(logits, dim=-1)
-                scores.extend(probabilities[:, self._entail_index].tolist())
+                scores.extend(probabilities[:, self._entail_index].cpu().tolist())
         return scores
+
+
+def _resolve_device(requested: str, torch) -> str:
+    requested = requested.lower()
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
+    return requested
+
+
+# Sentence boundaries for premise windows. The verifier may not import the
+# generation package's splitter (ADR-0003), and needs less of it: a boundary is
+# terminal punctuation followed by whitespace and something that starts a
+# sentence or a list item, or a line break. "10.000" and "0.05" have no
+# whitespace after the dot and never split.
+_BOUNDARY = re.compile(r"(?<=[.!?…;:])\s+(?=[\w(\[«\"“])|\n+")
+
+
+def premise_windows(premise: str, *, size: int = 2) -> list[str]:
+    """Overlapping spans of ``size`` consecutive sentences, stride one.
+
+    NLI models are trained on sentence-length premises. Handed a whole legal
+    article, the model under-scores claims copied from it verbatim — measured at
+    a 37% false-reject rate on kvkk-tr with 1200-character premises. Scoring
+    against short windows and keeping the best (as SummaC does) asks the
+    question the model was trained on.
+    """
+    units = [" ".join(u.split()) for u in _BOUNDARY.split(premise) if u and u.strip()]
+    if not units:
+        return []
+    if len(units) <= size:
+        return [" ".join(units)]
+    return [" ".join(units[i : i + size]) for i in range(len(units) - size + 1)]
+
+
+class WindowedNLIScorer:
+    """Max entailment over premise windows.
+
+    A claim is supported when *some* span of its cited evidence entails it.
+    Taking the max cannot let a claim borrow support from outside its
+    citations — every window is drawn from the cited text — which is the
+    distinction from the uncited ablation.
+    """
+
+    name = "nli-window"
+
+    def __init__(self, base: Scorer, *, size: int = 2) -> None:
+        self.base = base
+        self.size = size
+
+    def score(self, pairs: list[tuple[str, str]]) -> list[float]:
+        expanded: list[tuple[str, str]] = []
+        owners: list[int] = []
+        for index, (premise, hypothesis) in enumerate(pairs):
+            for window in premise_windows(premise, size=self.size):
+                expanded.append((window, hypothesis))
+                owners.append(index)
+        best = [0.0] * len(pairs)
+        for owner, score in zip(owners, self.base.score(expanded) if expanded else [], strict=True):
+            best[owner] = max(best[owner], float(score))
+        return best
 
 
 def get_scorer(settings: Settings) -> Scorer:
@@ -193,5 +262,9 @@ def get_scorer(settings: Settings) -> Scorer:
             batch_size=settings.verifier_batch_size,
             max_length=settings.verifier_max_length,
             quantize=settings.verifier_quantize,
+            device=settings.verifier_device,
         )
+    if backend in ("nli-window", "nli_window"):
+        base = get_scorer(settings.model_copy(update={"verifier_backend": "nli"}))
+        return WindowedNLIScorer(base, size=settings.verifier_window_sentences)
     raise ValueError(f"unknown VERIFIER_BACKEND {settings.verifier_backend!r}")

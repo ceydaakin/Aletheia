@@ -13,6 +13,8 @@ consequences we dislike.
 | [0005](0005-ingestion-and-versioning-semantics.md) | Amendment vs correction vs no-op; identity is extracted text | Accepted |
 | [0006](0006-hybrid-retrieval.md) | Hybrid retrieval: RRF over BM25 and dense, then reranked | Accepted |
 | [0007](0007-selective-risk.md) | The controlled risk is selective, conditioned on having answered | Accepted |
+| [0008](0008-gold-loss-from-controlled-hallucination.md) | Calibrate against injected hallucinations, not the verifier's labels | Accepted |
+| [0009](0009-online-drift-detection.md) | Test exchangeability on-line with a conformal test martingale | Accepted |
 
 New ADR: copy the shape of 0001, take the next number, never edit an accepted one —
 supersede it with a new record and mark the old one `Superseded by ADR-NNNN`.
