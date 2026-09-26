@@ -1,0 +1,1125 @@
+{
+  "settings": {
+    "records_dir": "../eval/results/records",
+    "out_dir": "../eval/results",
+    "datasets": "kvkk-tr,kvkk-en,en-public",
+    "delta": 0.05,
+    "fraction": 0.6,
+    "trials": 200,
+    "seed": 0,
+    "support_threshold": 0.5,
+    "variant": "nli",
+    "ablation_alpha": 0.15
+  },
+  "missing": [],
+  "meta": {
+    "kvkk-tr": {
+      "dataset": "kvkk-tr",
+      "lang": "tr",
+      "queries": 550,
+      "status_counts": {
+        "draft": 550,
+        "verified": 0,
+        "rejected": 0
+      },
+      "verified_only": false,
+      "generation": "extractive",
+      "embedding": "sentence-transformers",
+      "reranker": "cross-encoder",
+      "nli_model": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+      "verifier_max_length": 512,
+      "verifier_window_sentences": 2,
+      "variants": [
+        "nli",
+        "nli_any",
+        "overlap"
+      ],
+      "hallucination_rate": 0.15,
+      "seed": 0,
+      "max_claims": 4,
+      "top_n": 6,
+      "format": 1
+    },
+    "kvkk-en": {
+      "dataset": "kvkk-en",
+      "lang": "en",
+      "queries": 550,
+      "status_counts": {
+        "draft": 550,
+        "verified": 0,
+        "rejected": 0
+      },
+      "verified_only": false,
+      "generation": "extractive",
+      "embedding": "sentence-transformers",
+      "reranker": "cross-encoder",
+      "nli_model": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+      "verifier_max_length": 512,
+      "verifier_window_sentences": 2,
+      "variants": [
+        "nli"
+      ],
+      "hallucination_rate": 0.15,
+      "seed": 0,
+      "max_claims": 4,
+      "top_n": 6,
+      "format": 1
+    },
+    "en-public": {
+      "dataset": "en-public",
+      "lang": "en",
+      "queries": 400,
+      "status_counts": {
+        "draft": 400,
+        "verified": 0,
+        "rejected": 0
+      },
+      "verified_only": false,
+      "generation": "extractive",
+      "embedding": "sentence-transformers",
+      "reranker": "cross-encoder",
+      "nli_model": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+      "verifier_max_length": 512,
+      "verifier_window_sentences": 2,
+      "variants": [
+        "nli",
+        "nli_window",
+        "nli_any",
+        "overlap"
+      ],
+      "hallucination_rate": 0.15,
+      "seed": 0,
+      "max_claims": 4,
+      "top_n": 6,
+      "format": 1
+    }
+  },
+  "guarantee": {
+    "kvkk-tr": {
+      "0.05": {
+        "trials": 200.0,
+        "certified_rate": 0.0,
+        "mean_threshold": NaN,
+        "mean_risk": NaN,
+        "risk_ci95": NaN,
+        "exceedance_rate": NaN,
+        "mean_answer_rate": 0.0,
+        "mean_useful_rate": 0.0,
+        "mean_unanswerable_answered_rate": NaN
+      },
+      "0.075": {
+        "trials": 200.0,
+        "certified_rate": 0.0,
+        "mean_threshold": NaN,
+        "mean_risk": NaN,
+        "risk_ci95": NaN,
+        "exceedance_rate": NaN,
+        "mean_answer_rate": 0.0,
+        "mean_useful_rate": 0.0,
+        "mean_unanswerable_answered_rate": NaN
+      },
+      "0.1": {
+        "trials": 200.0,
+        "certified_rate": 0.175,
+        "mean_threshold": 0.5880000000000001,
+        "mean_risk": 0.0862879458980287,
+        "risk_ci95": 0.0021155382725761354,
+        "exceedance_rate": 0.05714285714285714,
+        "mean_answer_rate": 0.14586363636363636,
+        "mean_useful_rate": 0.03970454545454545,
+        "mean_unanswerable_answered_rate": 0.8264741179473566
+      },
+      "0.125": {
+        "trials": 200.0,
+        "certified_rate": 0.825,
+        "mean_threshold": 0.9387878787878788,
+        "mean_risk": 0.06962968635914522,
+        "risk_ci95": 0.0016697423310021893,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.7488409090909092,
+        "mean_useful_rate": 0.2121818181818182,
+        "mean_unanswerable_answered_rate": 0.9036750117243242
+      },
+      "0.15": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795
+      },
+      "0.175": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795
+      },
+      "0.2": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795
+      },
+      "0.25": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795
+      },
+      "0.3": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795
+      },
+      "0.35": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795
+      }
+    },
+    "kvkk-en": {
+      "0.05": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.075": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.1": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.125": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.15": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.175": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.2": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.25": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.3": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      },
+      "0.35": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379
+      }
+    },
+    "en-public": {
+      "0.05": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.075": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.1": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.125": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.15": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.175": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.2": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.25": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.3": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      },
+      "0.35": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838
+      }
+    }
+  },
+  "ablations": {
+    "kvkk-tr": {
+      "reference_coverage": 0.9150454545454545,
+      "naive RAG (no verifier)": {
+        "mean_answer_rate": 0.9963636363636363,
+        "mean_risk": 0.3795620437956204,
+        "mean_useful_rate": 0.4072727272727273,
+        "certified_rate": NaN,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      },
+      "post-filter, nli \u2265 0.5": {
+        "mean_answer_rate": 0.9145454545454546,
+        "mean_risk": 0.0636182902584493,
+        "mean_useful_rate": 0.26,
+        "certified_rate": NaN,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      },
+      "self-consistency (n=5)": null,
+      "**Aletheia (nli, strict, LTT)**": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795,
+        "aurc": 0.060666509126718095,
+        "risk_at_reference": 0.0636182902584493
+      },
+      "verifier: windowed NLI": null,
+      "(b) verifier: token overlap": {
+        "trials": 200.0,
+        "certified_rate": 0.4,
+        "mean_threshold": 0.02,
+        "mean_risk": 0.09609588932812431,
+        "risk_ci95": 0.002096327019222902,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.26729545454545456,
+        "mean_useful_rate": 0.11699999999999999,
+        "mean_unanswerable_answered_rate": 0.682190387961518,
+        "aurc": 0.13366966491667978,
+        "risk_at_reference": 0.3240556660039761
+      },
+      "(c) no citation forcing": {
+        "trials": 200.0,
+        "certified_rate": 0.005,
+        "mean_threshold": 0.06,
+        "mean_risk": 0.19148936170212766,
+        "risk_ci95": NaN,
+        "exceedance_rate": 1.0,
+        "mean_answer_rate": 0.0010681818181818182,
+        "mean_useful_rate": 0.0004772727272727273,
+        "mean_unanswerable_answered_rate": 0.19718309859154928,
+        "aurc": 0.13085002543825952,
+        "risk_at_reference": 0.18091451292246521
+      },
+      "flagged instead of strict": {
+        "trials": 200.0,
+        "certified_rate": 0.02,
+        "mean_threshold": 0.895,
+        "mean_risk": 0.15840744307239152,
+        "risk_ci95": 0.007497499256240926,
+        "exceedance_rate": 0.75,
+        "mean_answer_rate": 0.007863636363636364,
+        "mean_useful_rate": 0.0031136363636363636,
+        "mean_unanswerable_answered_rate": 0.3825407002676182,
+        "aurc": 0.17060702962634874,
+        "risk_at_reference": 0.34393638170974156
+      },
+      "(a) no reranker": null,
+      "loss from the verifier (circular)": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.06548712701374376,
+        "risk_ci95": 0.0018745284841381233,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.9150454545454545,
+        "mean_useful_rate": 0.25929545454545455,
+        "mean_unanswerable_answered_rate": 0.9122992167989795,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      }
+    },
+    "kvkk-en": {
+      "reference_coverage": 0.8844772727272727,
+      "naive RAG (no verifier)": {
+        "mean_answer_rate": 1.0,
+        "mean_risk": 0.4618181818181818,
+        "mean_useful_rate": 0.34,
+        "certified_rate": NaN,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      },
+      "post-filter, nli \u2265 0.5": {
+        "mean_answer_rate": 0.8836363636363637,
+        "mean_risk": 0.00205761316872428,
+        "mean_useful_rate": 0.1690909090909091,
+        "certified_rate": NaN,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      },
+      "self-consistency (n=5)": null,
+      "**Aletheia (nli, strict, LTT)**": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379,
+        "aurc": 0.0001264608927673351,
+        "risk_at_reference": 0.00205761316872428
+      },
+      "verifier: windowed NLI": null,
+      "(b) verifier: token overlap": null,
+      "(c) no citation forcing": null,
+      "flagged instead of strict": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 0.9773000000000001,
+        "mean_risk": 0.030346189704477434,
+        "risk_ci95": 0.0021609644434358337,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.33240909090909093,
+        "mean_useful_rate": 0.11129545454545454,
+        "mean_unanswerable_answered_rate": 0.3175213973389306,
+        "aurc": 0.1621114326508308,
+        "risk_at_reference": 0.4012345679012346
+      },
+      "(a) no reranker": null,
+      "loss from the verifier (circular)": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.002156979822145737,
+        "risk_ci95": 0.000352269441197895,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.8844772727272727,
+        "mean_useful_rate": 0.16820454545454544,
+        "mean_unanswerable_answered_rate": 0.8639431205754379,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      }
+    },
+    "en-public": {
+      "reference_coverage": 0.76815625,
+      "naive RAG (no verifier)": {
+        "mean_answer_rate": 1.0,
+        "mean_risk": 0.3875,
+        "mean_useful_rate": 0.47,
+        "certified_rate": NaN,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      },
+      "post-filter, nli \u2265 0.5": {
+        "mean_answer_rate": 0.7675,
+        "mean_risk": 0.0,
+        "mean_useful_rate": 0.1475,
+        "certified_rate": NaN,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      },
+      "self-consistency (n=5)": null,
+      "**Aletheia (nli, strict, LTT)**": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838,
+        "aurc": 0.0,
+        "risk_at_reference": 0.0
+      },
+      "verifier: windowed NLI": {
+        "trials": 200.0,
+        "certified_rate": 0.56,
+        "mean_threshold": 0.3508928571428572,
+        "mean_risk": 0.08919214706552248,
+        "risk_ci95": 0.004033414733177632,
+        "exceedance_rate": 0.017857142857142856,
+        "mean_answer_rate": 0.43512500000000004,
+        "mean_useful_rate": 0.17181249999999998,
+        "mean_unanswerable_answered_rate": 0.8256285536026775,
+        "aurc": 0.07917605023920389,
+        "risk_at_reference": 0.07166123778501629
+      },
+      "(b) verifier: token overlap": {
+        "trials": 200.0,
+        "certified_rate": 0.0,
+        "mean_threshold": NaN,
+        "mean_risk": NaN,
+        "risk_ci95": NaN,
+        "exceedance_rate": NaN,
+        "mean_answer_rate": 0.0,
+        "mean_useful_rate": 0.0,
+        "mean_unanswerable_answered_rate": NaN,
+        "aurc": 0.1451018077345484,
+        "risk_at_reference": 0.21172638436482086
+      },
+      "(c) no citation forcing": {
+        "trials": 200.0,
+        "certified_rate": 0.0,
+        "mean_threshold": NaN,
+        "mean_risk": NaN,
+        "risk_ci95": NaN,
+        "exceedance_rate": NaN,
+        "mean_answer_rate": 0.0,
+        "mean_useful_rate": 0.0,
+        "mean_unanswerable_answered_rate": NaN,
+        "aurc": 0.1764159505915696,
+        "risk_at_reference": 0.18241042345276873
+      },
+      "flagged instead of strict": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 0.98,
+        "mean_risk": 0.007228234605841072,
+        "risk_ci95": 0.0013344413256747363,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.3121875,
+        "mean_useful_rate": 0.1511875,
+        "mean_unanswerable_answered_rate": 0.34453635994979903,
+        "aurc": 0.1162336334698727,
+        "risk_at_reference": 0.23127035830618892
+      },
+      "(a) no reranker": null,
+      "loss from the verifier (circular)": {
+        "trials": 200.0,
+        "certified_rate": 1.0,
+        "mean_threshold": 1.0,
+        "mean_risk": 0.0,
+        "risk_ci95": 0.0,
+        "exceedance_rate": 0.0,
+        "mean_answer_rate": 0.76815625,
+        "mean_useful_rate": 0.15053125,
+        "mean_unanswerable_answered_rate": 0.8143432957110838,
+        "aurc": NaN,
+        "risk_at_reference": NaN
+      }
+    }
+  },
+  "crosslingual": {
+    "EN \u2192 EN@0.05": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379
+    },
+    "TR \u2192 TR@0.05": {
+      "trials": 200.0,
+      "certified_rate": 0.0,
+      "mean_threshold": NaN,
+      "mean_risk": NaN,
+      "risk_ci95": NaN,
+      "exceedance_rate": NaN,
+      "mean_answer_rate": 0.0,
+      "mean_useful_rate": 0.0,
+      "mean_unanswerable_answered_rate": NaN
+    },
+    "EN \u2192 TR@0.05": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.84,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795
+    },
+    "TR \u2192 EN@0.05": {
+      "trials": 200.0,
+      "certified_rate": 0.0,
+      "mean_threshold": NaN,
+      "mean_risk": NaN,
+      "risk_ci95": NaN,
+      "exceedance_rate": NaN,
+      "mean_answer_rate": 0.0,
+      "mean_useful_rate": 0.0,
+      "mean_unanswerable_answered_rate": NaN
+    },
+    "EN \u2192 EN@0.1": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379
+    },
+    "TR \u2192 TR@0.1": {
+      "trials": 200.0,
+      "certified_rate": 0.175,
+      "mean_threshold": 0.5880000000000001,
+      "mean_risk": 0.0862879458980287,
+      "risk_ci95": 0.0021155382725761354,
+      "exceedance_rate": 0.05714285714285714,
+      "mean_answer_rate": 0.14586363636363636,
+      "mean_useful_rate": 0.03970454545454545,
+      "mean_unanswerable_answered_rate": 0.8264741179473566
+    },
+    "EN \u2192 TR@0.1": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.005,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795
+    },
+    "TR \u2192 EN@0.1": {
+      "trials": 200.0,
+      "certified_rate": 0.175,
+      "mean_threshold": 0.5880000000000001,
+      "mean_risk": 0.0015184923072117792,
+      "risk_ci95": 0.0008074780064650942,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.1378181818181818,
+      "mean_useful_rate": 0.025818181818181817,
+      "mean_unanswerable_answered_rate": 0.7640852567830644
+    },
+    "EN \u2192 EN@0.15": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379
+    },
+    "TR \u2192 TR@0.15": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795
+    },
+    "EN \u2192 TR@0.15": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795
+    },
+    "TR \u2192 EN@0.15": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379
+    },
+    "EN \u2192 EN@0.2": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379
+    },
+    "TR \u2192 TR@0.2": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795
+    },
+    "EN \u2192 TR@0.2": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795
+    },
+    "TR \u2192 EN@0.2": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379
+    },
+    "transfer_test@0.05": {
+      "answered": 503.0,
+      "failures": 32.0,
+      "pvalue": 0.9293547254600556,
+      "threshold": 1.0
+    },
+    "transfer_test@0.1": {
+      "answered": 503.0,
+      "failures": 32.0,
+      "pvalue": 0.0026415672626232886,
+      "threshold": 1.0
+    }
+  },
+  "verifier": {
+    "kvkk-tr/nli/number": {
+      "auroc": 0.9697009215788559,
+      "n_corrupted": 24,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.35732916014606153
+    },
+    "kvkk-tr/nli/negation": {
+      "auroc": 0.960585614476171,
+      "n_corrupted": 122,
+      "false_accept_rate": 0.00819672131147541,
+      "false_reject_rate": 0.35732916014606153
+    },
+    "kvkk-tr/nli/term": {
+      "auroc": 0.7328209478400344,
+      "n_corrupted": 107,
+      "false_accept_rate": 0.308411214953271,
+      "false_reject_rate": 0.35732916014606153
+    },
+    "kvkk-tr/nli/all": {
+      "auroc": 0.8651229585093639,
+      "n_corrupted": 253,
+      "false_accept_rate": 0.13438735177865613,
+      "false_reject_rate": 0.35732916014606153
+    },
+    "kvkk-tr/nli_any/number": {
+      "auroc": 0.8058055120848548,
+      "n_corrupted": 24,
+      "false_accept_rate": 0.3333333333333333,
+      "false_reject_rate": 0.16797078768909754
+    },
+    "kvkk-tr/nli_any/negation": {
+      "auroc": 0.8590886545746855,
+      "n_corrupted": 122,
+      "false_accept_rate": 0.2540983606557377,
+      "false_reject_rate": 0.16797078768909754
+    },
+    "kvkk-tr/nli_any/term": {
+      "auroc": 0.6588005011724901,
+      "n_corrupted": 107,
+      "false_accept_rate": 0.616822429906542,
+      "false_reject_rate": 0.16797078768909754
+    },
+    "kvkk-tr/nli_any/all": {
+      "auroc": 0.7693272797375675,
+      "n_corrupted": 253,
+      "false_accept_rate": 0.4150197628458498,
+      "false_reject_rate": 0.16797078768909754
+    },
+    "kvkk-tr/overlap/number": {
+      "auroc": 0.875,
+      "n_corrupted": 24,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.0
+    },
+    "kvkk-tr/overlap/negation": {
+      "auroc": 0.9918032786885246,
+      "n_corrupted": 122,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.0
+    },
+    "kvkk-tr/overlap/term": {
+      "auroc": 0.8551401869158879,
+      "n_corrupted": 107,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.0
+    },
+    "kvkk-tr/overlap/all": {
+      "auroc": 0.9229249011857708,
+      "n_corrupted": 253,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.0
+    },
+    "kvkk-en/nli/number": {
+      "auroc": 0.9858591001666358,
+      "n_corrupted": 22,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.439918533604888
+    },
+    "kvkk-en/nli/negation": {
+      "auroc": 0.9796689243593995,
+      "n_corrupted": 215,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.439918533604888
+    },
+    "kvkk-en/nli/term": {
+      "auroc": 0.9545061099796334,
+      "n_corrupted": 80,
+      "false_accept_rate": 0.0125,
+      "false_reject_rate": 0.439918533604888
+    },
+    "kvkk-en/nli/all": {
+      "auroc": 0.9737482893984465,
+      "n_corrupted": 317,
+      "false_accept_rate": 0.0031545741324921135,
+      "false_reject_rate": 0.439918533604888
+    },
+    "en-public/nli/number": {
+      "auroc": 0.9736330823431887,
+      "n_corrupted": 77,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.6090425531914894
+    },
+    "en-public/nli/negation": {
+      "auroc": 0.9672720571230342,
+      "n_corrupted": 92,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.6090425531914894
+    },
+    "en-public/nli/term": {
+      "auroc": 0.9683843085106383,
+      "n_corrupted": 20,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.6090425531914894
+    },
+    "en-public/nli/all": {
+      "auroc": 0.9699812844759653,
+      "n_corrupted": 189,
+      "false_accept_rate": 0.0,
+      "false_reject_rate": 0.6090425531914894
+    },
+    "en-public/nli_window/number": {
+      "auroc": 0.9535394791378834,
+      "n_corrupted": 77,
+      "false_accept_rate": 0.1038961038961039,
+      "false_reject_rate": 0.09175531914893617
+    },
+    "en-public/nli_window/negation": {
+      "auroc": 0.8419179290009251,
+      "n_corrupted": 92,
+      "false_accept_rate": 0.34782608695652173,
+      "false_reject_rate": 0.09175531914893617
+    },
+    "en-public/nli_window/term": {
+      "auroc": 0.9381482712765957,
+      "n_corrupted": 20,
+      "false_accept_rate": 0.15,
+      "false_reject_rate": 0.09175531914893617
+    },
+    "en-public/nli_window/all": {
+      "auroc": 0.8975764803557357,
+      "n_corrupted": 189,
+      "false_accept_rate": 0.2275132275132275,
+      "false_reject_rate": 0.09175531914893617
+    },
+    "en-public/nli_any/number": {
+      "auroc": 0.8084329234595192,
+      "n_corrupted": 77,
+      "false_accept_rate": 0.14285714285714285,
+      "false_reject_rate": 0.39694148936170215
+    },
+    "en-public/nli_any/negation": {
+      "auroc": 0.536171658186864,
+      "n_corrupted": 92,
+      "false_accept_rate": 0.5217391304347826,
+      "false_reject_rate": 0.39694148936170215
+    },
+    "en-public/nli_any/term": {
+      "auroc": 0.757313829787234,
+      "n_corrupted": 20,
+      "false_accept_rate": 0.25,
+      "false_reject_rate": 0.39694148936170215
+    },
+    "en-public/nli_any/all": {
+      "auroc": 0.6704942024090961,
+      "n_corrupted": 189,
+      "false_accept_rate": 0.3386243386243386,
+      "false_reject_rate": 0.39694148936170215
+    },
+    "en-public/overlap/number": {
+      "auroc": 0.9364076747720365,
+      "n_corrupted": 77,
+      "false_accept_rate": 0.987012987012987,
+      "false_reject_rate": 0.003324468085106383
+    },
+    "en-public/overlap/negation": {
+      "auroc": 0.8213495895004626,
+      "n_corrupted": 92,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.003324468085106383
+    },
+    "en-public/overlap/term": {
+      "auroc": 0.9942320478723404,
+      "n_corrupted": 20,
+      "false_accept_rate": 1.0,
+      "false_reject_rate": 0.003324468085106383
+    },
+    "en-public/overlap/all": {
+      "auroc": 0.886519545761567,
+      "n_corrupted": 189,
+      "false_accept_rate": 0.9947089947089947,
+      "false_reject_rate": 0.003324468085106383
+    }
+  },
+  "retrieval": {
+    "kvkk-tr": {
+      "doc_recall": 0.97,
+      "evidence_recall": 0.96,
+      "n": 400
+    },
+    "kvkk-en": {
+      "doc_recall": 0.9775,
+      "evidence_recall": 0.9675,
+      "n": 400
+    },
+    "en-public": {
+      "doc_recall": 1.0,
+      "evidence_recall": 0.9970588235294118,
+      "n": 340
+    }
+  },
+  "sensitivity": {
+    "kvkk-tr": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.06548712701374376,
+      "risk_ci95": 0.0018745284841381233,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.9150454545454545,
+      "mean_useful_rate": 0.25929545454545455,
+      "mean_unanswerable_answered_rate": 0.9122992167989795,
+      "base_rate": 0.3795620437956204
+    },
+    "kvkk-en": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.002156979822145737,
+      "risk_ci95": 0.000352269441197895,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.8844772727272727,
+      "mean_useful_rate": 0.16820454545454544,
+      "mean_unanswerable_answered_rate": 0.8639431205754379,
+      "base_rate": 0.4618181818181818
+    },
+    "en-public": {
+      "trials": 200.0,
+      "certified_rate": 1.0,
+      "mean_threshold": 1.0,
+      "mean_risk": 0.0,
+      "risk_ci95": 0.0,
+      "exceedance_rate": 0.0,
+      "mean_answer_rate": 0.76815625,
+      "mean_useful_rate": 0.15053125,
+      "mean_unanswerable_answered_rate": 0.8143432957110838,
+      "base_rate": 0.3875
+    }
+  }
+}
