@@ -235,6 +235,104 @@ async def test_latest_certified_run_wins(db, client) -> None:
     assert body["calibration_id"] == "cal_new"
 
 
+# --- Drift: the guarantee lapses when exchangeability does ------------------
+
+
+async def add_reference(db, calibration_id: str, statistics: list[float]) -> None:
+    async with db.transaction() as conn:
+        await store.save_examples(
+            conn, calibration_id,
+            [("q", "a", s, False, "synthetic", "calibration") for s in statistics],
+        )
+
+
+async def test_a_corpus_change_after_calibration_withdraws_the_guarantee(db, client) -> None:
+    await save_calibration(db, threshold=0.4)
+    async with db.transaction() as conn:
+        await conn.execute(
+            "INSERT INTO corpus_events (tenant_id, doc_id, version, event) "
+            "VALUES (%s, 'policy.md', 2, 'amended')",
+            (TEST_TENANT,),
+        )
+
+    body = await decide(client, [claim("fine", 0.99)])
+    assert body["decision"] == Decision.ABSTAIN
+    assert body["abstain_reason"] == "drift_detected"
+    assert body["degraded"] is True
+    assert "1 document(s) changed" in body["guarantee"]
+
+    view = (await client.get(f"/calibration/{TEST_TENANT}")).json()
+    assert view["in_force"] is False
+    assert view["reason"] == "corpus_changed"
+
+
+async def test_a_sustained_shift_in_the_statistic_raises_the_alarm(db, client) -> None:
+    """Calibration saw statistics in [0, 0.3); live traffic sits at 0.9. The
+    martingale must cross its level, the request that crosses it must be
+    refused with drift_detected, and the alarm must outlast the shift."""
+    await save_calibration(db, threshold=0.95)
+    await add_reference(db, "cal_test", [i / 500 for i in range(150)])
+
+    reasons = []
+    for _ in range(80):
+        body = await decide(client, [claim("weak", 0.1)])
+        reasons.append(body.get("abstain_reason"))
+        if body.get("abstain_reason") == "drift_detected":
+            break
+    assert reasons[-1] == "drift_detected", reasons
+    assert len(reasons) > 3, "one outlier must not be enough to alarm"
+
+    # Back to calibration-like traffic: the alarm is latched.
+    body = await decide(client, [claim("strong", 0.95)])
+    assert body["abstain_reason"] == "drift_detected"
+
+    view = (await client.get(f"/calibration/{TEST_TENANT}")).json()
+    assert view["in_force"] is False
+    assert view["drift"]["alarmed"] is True
+    # The wealth itself falls again on calibration-like traffic; the alarm does not.
+    assert view["drift"]["martingale"] > 1.0
+
+
+async def test_exchangeable_traffic_does_not_alarm(db, client) -> None:
+    await save_calibration(db, threshold=0.95)
+    reference = [((i * 37) % 100) / 100 * 0.5 for i in range(150)]
+    await add_reference(db, "cal_test", reference)
+
+    for i in range(60):
+        statistic = ((i * 53) % 100) / 100 * 0.5
+        body = await decide(client, [claim("c", round(1 - statistic, 4))])
+        assert body.get("abstain_reason") != "drift_detected"
+
+    view = (await client.get(f"/calibration/{TEST_TENANT}")).json()
+    assert view["drift"]["observations"] == 60
+    assert view["drift"]["alarmed"] is False
+    assert view["in_force"] is True
+
+
+async def test_the_alarm_level_is_pinned_when_the_monitor_starts(db) -> None:
+    """Ville's inequality needs the level fixed before the sequence. A config
+    change mid-stream must not move the bar for a martingale already running."""
+    await save_calibration(db, threshold=0.95)
+    async with db.transaction() as conn:
+        await store.observe_drift(conn, "cal_test", 0.1, alarm_level=100, jump=0.01)
+    async with db.transaction() as conn:
+        # A later caller with a much lower level: must be ignored.
+        state = await store.observe_drift(conn, "cal_test", 0.99, alarm_level=1.0001, jump=0.5)
+    assert not state.alarmed
+    async with db.connection() as conn:
+        pinned = await store.drift_monitor(conn, "cal_test")
+    assert pinned is not None
+    assert pinned.alarm_level == 100
+    assert pinned.jump == 0.01
+
+
+async def test_requests_with_no_claims_do_not_feed_the_monitor(db, client) -> None:
+    await save_calibration(db, threshold=0.4)
+    await decide(client, [])
+    view = (await client.get(f"/calibration/{TEST_TENANT}")).json()
+    assert view["drift"]["observations"] == 0
+
+
 # --- The statistic itself (pure) -------------------------------------------
 
 

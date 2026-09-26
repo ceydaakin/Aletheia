@@ -26,6 +26,10 @@ data:
   # and the risk controller abstains rather than quoting a bound it cannot stand
   # behind (PRD §5.2).
   CALIBRATION_MAX_AGE_HOURS: "168"
+  # ADR-0009: corpus change or a test martingale over live statistics
+  # withdraws the guarantee. P(false alarm, ever) <= 1/DRIFT_ALARM_LEVEL.
+  DRIFT_DETECTION: "true"
+  DRIFT_ALARM_LEVEL: "100"
 
   RETRIEVAL_LEXICAL_K: "50"
   RETRIEVAL_DENSE_K: "50"

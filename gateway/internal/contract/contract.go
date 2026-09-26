@@ -53,6 +53,10 @@ const (
 	ReasonOutOfCorpus AbstainReason = "out_of_corpus"
 	// ReasonStaleCalibration: no valid threshold, so no guarantee can be made.
 	ReasonStaleCalibration AbstainReason = "stale_calibration"
+	// ReasonDriftDetected: a threshold exists, but live traffic or the corpus is
+	// no longer exchangeable with the data it was certified on, so it is not
+	// quoted. Always accompanied by degraded=true.
+	ReasonDriftDetected AbstainReason = "drift_detected"
 )
 
 // ClaimStatus is the verifier's per-claim verdict.

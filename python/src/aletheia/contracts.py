@@ -35,6 +35,7 @@ class AbstainReason(StrEnum):
     CONFLICTING_SOURCES = "conflicting_sources"
     OUT_OF_CORPUS = "out_of_corpus"
     STALE_CALIBRATION = "stale_calibration"
+    DRIFT_DETECTED = "drift_detected"
 
 
 class ClaimStatus(StrEnum):

@@ -170,6 +170,34 @@ func TestAnswerHappyPath(t *testing.T) {
 	}
 }
 
+// A drift abstention from the risk controller reaches the caller intact: the
+// reason, the degraded flag, and the guarantee text explaining why no bound is
+// quoted. Rewriting it to a generic reason would hide that the system needs
+// recalibrating rather than better evidence.
+func TestDriftAbstentionPassesThrough(t *testing.T) {
+	s := healthyStubs()
+	s.risk = jsonHandler(contract.DecideResponse{
+		Decision:      contract.DecisionAbstain,
+		AbstainReason: contract.ReasonDriftDetected,
+		Degraded:      true,
+		Guarantee:     "no guarantee in force: live risk statistics are no longer exchangeable",
+	})
+	rec := post(t, newTestServer(t, s), `{"query":"notice period?"}`, testKey)
+	resp := decode(t, rec)
+	if resp.Decision != contract.DecisionAbstain {
+		t.Fatalf("decision = %q, want abstain", resp.Decision)
+	}
+	if resp.AbstainReason != contract.ReasonDriftDetected {
+		t.Errorf("reason = %q, want %q", resp.AbstainReason, contract.ReasonDriftDetected)
+	}
+	if !resp.Degraded {
+		t.Error("drift abstention must be marked degraded")
+	}
+	if resp.Answer != "" {
+		t.Errorf("abstention carries an answer: %q", resp.Answer)
+	}
+}
+
 // The core invariant: no upstream failure may produce an unverified answer.
 func TestFailurePolicyNeverAnswersUnverified(t *testing.T) {
 	cases := []struct {

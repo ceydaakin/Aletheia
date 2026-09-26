@@ -104,7 +104,8 @@ spec:
 # The cadence matters more than it looks. The risk controller refuses to serve a
 # calibration older than CALIBRATION_MAX_AGE_HOURS, so this schedule and that
 # threshold are the same decision written twice — if the job stops, the system
-# stops answering rather than quietly serving a stale bound.
+# stops answering rather than quietly serving a stale bound. It is also how a
+# drift alarm (ADR-0009) is cleared: only a fresh calibration re-arms the monitor.
 apiVersion: batch/v1
 kind: CronJob
 metadata: { name: calibrate, namespace: aletheia }
@@ -126,12 +127,20 @@ spec:
                 - python
                 - -m
                 - aletheia.eval.calibrate
-                - --dataset=/corpora/datasets/bootstrap-tr
+                - --dataset=/corpora/datasets/kvkk-tr
                 - --alpha=0.05
+                - --calibration-fraction=0.6
+                # ADR-0008: loss from injected hallucinations, not the verifier.
+                - --loss=gold
+                - --rate=0.15
               envFrom: [{ configMapRef: { name: aletheia-config } }]
               env:
                 - name: VERIFIER_BACKEND
                   value: "nli"
+                - name: EMBEDDING_BACKEND
+                  value: "sentence-transformers"
+                - name: RERANKER_BACKEND
+                  value: "cross-encoder"
                 - name: DATABASE_URL
                   valueFrom: { secretKeyRef: { name: aletheia, key: database-url } }
                 - name: HF_HOME

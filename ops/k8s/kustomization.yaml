@@ -19,5 +19,6 @@ configMapGenerator:
       - ../../db/migrations/0001_init.sql
       - ../../db/migrations/0002_ingestion.sql
       - ../../db/migrations/0003_retrieval.sql
+      - ../../db/migrations/0004_drift_and_gold_labels.sql
 
 # The secret is created out of band; see secret.example.yaml.

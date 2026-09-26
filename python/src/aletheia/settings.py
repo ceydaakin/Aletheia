@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # Beyond this age a calibration no longer describes the corpus it was fitted
     # on, and the guarantee it backs is not one we are willing to quote.
     calibration_max_age_hours: int = 168
+    # On-line exchangeability test (aletheia.risk.drift). The alarm level L
+    # bounds the false-alarm probability by 1/L over the calibration's whole
+    # lifetime, however many requests it serves (Ville's inequality).
+    drift_detection: bool = True
+    drift_alarm_level: float = 100.0
+    drift_jump: float = 0.01
 
     # Verifier. "overlap" is the model-free baseline and an ablation row; "nli"
     # scores P(entailment) with a multilingual model and needs the `models` extra.
@@ -83,6 +89,13 @@ class Settings(BaseSettings):
     # Premises are single cited chunks (~1200 chars), so 256 tokens covers them
     # and attention cost is quadratic in this number.
     verifier_max_length: int = 256
+    # "cpu", "mps", "cuda", or "auto". The service stays on CPU by default; the
+    # eval harness scores tens of thousands of pairs and is where an accelerator
+    # pays. Precision is fp32 on every device, so the scores do not depend on it
+    # beyond floating-point noise.
+    verifier_device: str = "cpu"
+    # For VERIFIER_BACKEND=nli-window: sentences per premise window.
+    verifier_window_sentences: int = 2
     # A claim scoring at or above this is treated as supported. This is *not* the
     # risk threshold — that one is calibrated (ADR-0004). This only decides the
     # per-claim label the action policy acts on.

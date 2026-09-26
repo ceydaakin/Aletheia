@@ -99,10 +99,48 @@ async def decide(req: DecideRequest) -> DecideResponse:
             degraded=True,
         )
 
+    if settings.drift_detection and record.corpus_known_at is not None:
+        async with get_db().connection() as conn:
+            changed = await store.corpus_changes_since(conn, req.tenant_id, record.corpus_known_at)
+        if changed:
+            # The bound was fitted on a corpus that no longer exists. Every
+            # document change is treated as breaking exchangeability, because
+            # "how much change is fine" would be an uncalibrated threshold.
+            return _abstain(
+                AbstainReason.DRIFT_DETECTED,
+                f"no guarantee in force: {changed} document(s) changed since "
+                f"calibration {record.calibration_id} was fitted; recalibrate",
+                degraded=True,
+            )
+
     claims = apply_action_policy(req.claims, req.mode)
     kept = retained(claims)
     statistic = risk_statistic(claims)
     guarantee = record.guarantee()
+
+    if settings.drift_detection and req.claims:
+        async with get_db().transaction() as conn:
+            monitor = await store.observe_drift(
+                conn, record.calibration_id, statistic,
+                alarm_level=settings.drift_alarm_level, jump=settings.drift_jump,
+            )
+        if monitor.alarmed:
+            # Checked on the statistic that was just added, so the request that
+            # tips the martingale over is itself refused.
+            return DecideResponse(
+                decision=Decision.ABSTAIN,
+                statistic=round(statistic, 4),
+                threshold=record.threshold,
+                calibration_id=record.calibration_id,
+                guarantee=(
+                    "no guarantee in force: live risk statistics are no longer "
+                    f"exchangeable with calibration {record.calibration_id} "
+                    "(test martingale crossed its alarm level); recalibrate"
+                ),
+                abstain_reason=AbstainReason.DRIFT_DETECTED,
+                degraded=True,
+                claims=[],
+            )
 
     if not kept:
         return DecideResponse(
@@ -159,9 +197,34 @@ async def calibration(tenant_id: str, alpha: float = 0.05) -> dict:
 
     settings = get_settings()
     stale = record.is_stale(settings.calibration_max_age_hours, now=now)
+    async with get_db().connection() as conn:
+        monitor = await store.drift_monitor(conn, record.calibration_id)
+        changed = (
+            await store.corpus_changes_since(conn, tenant_id, record.corpus_known_at)
+            if record.corpus_known_at is not None
+            else 0
+        )
+    drifted = settings.drift_detection and (
+        bool(changed) or (monitor is not None and monitor.state.alarmed)
+    )
+    reason = "stale" if stale else "corpus_changed" if changed and drifted else (
+        "drift_detected" if drifted else ""
+    )
     return {
-        "in_force": not stale,
-        "reason": "stale" if stale else "",
+        "in_force": not stale and not drifted,
+        "reason": reason,
+        "loss_source": record.loss_source,
+        "hallucination_rate": record.hallucination_rate,
+        "drift": {
+            "enabled": settings.drift_detection,
+            "observations": monitor.state.n if monitor else 0,
+            "martingale": round(monitor.state.wealth, 4) if monitor else 1.0,
+            # The level this monitor is judged against, pinned when it started;
+            # the setting only applies to calibrations created after it changed.
+            "alarm_level": monitor.alarm_level if monitor else settings.drift_alarm_level,
+            "alarmed": bool(monitor and monitor.state.alarmed),
+            "documents_changed_since_calibration": changed,
+        },
         "calibration_id": record.calibration_id,
         "alpha": record.alpha,
         "delta": record.delta,
