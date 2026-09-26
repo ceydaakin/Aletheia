@@ -2,6 +2,14 @@
 
 *Draft blog post. Companion to the [technical report](aletheia.md).*
 
+> **Update, September 2026.** Written when the evaluation set had 27 questions and
+> certified nothing. It now has 1,500 over a parallel Turkish–English legal corpus:
+> every certified threshold held its α on held-out data, unsupported responses fell
+> from 38–46% to 0.2–6.5%, and the headline finding is that a threshold certified in
+> English misses its budget in Turkish in 84% of splits — because the same entailment
+> model accepts 31% of swapped legal terms in Turkish and 1.3% in English. The report
+> has the numbers; the argument below stands.
+
 ---
 
 Every RAG demo ends the same way. A fluent paragraph, a list of sources

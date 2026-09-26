@@ -1,6 +1,6 @@
 # Aletheia: a risk-controlled RAG gateway
 
-**Ceyda Akın** · Technical report, draft · August 2026
+**Ceyda Akın** · Technical report, draft v2 · September 2026
 
 ---
 
@@ -11,16 +11,28 @@ the reader. Aletheia is a serving layer that instead treats correctness as a
 parameter: each answer is decomposed into atomic claims, each claim is checked
 against the passages it cites with a natural-language-inference model, and the
 whole response is gated by a threshold selected under distribution-free risk
-control. When the threshold cannot be met the system abstains and says why.
+control (Learn-then-Test). When the threshold cannot be met the system abstains
+and says why, and when live traffic stops being exchangeable with the
+calibration data — tested on-line with a conformal test martingale — it stops
+quoting the bound.
 
-This report describes the design, the engineering, and what has and has not been
-established empirically. The system runs end to end; the calibration machinery is
-verified against synthetic data where ground truth is known; and on the real
-evaluation set it **correctly certifies nothing**, because 27 labelled queries are
-far below the sample-size floor the procedure requires. That negative result is
-reported here as the primary empirical finding, alongside three defects that only
-measurement exposed — including one where a bound was arithmetically valid and
-empirically false in 56% of runs.
+We evaluate on a parallel Turkish–English legal corpus (the Turkish data
+protection law and three regulations, article-aligned with the regulator's
+English translation, 550 questions per language) and an English public-domain
+set (400 questions). Because the generator is extractive, hallucinations are
+injected at known locations and the loss is read from that ground truth, not
+from the verifier — so the verifier's own errors fall inside the bound. Three
+results. (1) Wherever a threshold was certified — three datasets, ten risk
+levels, 200 random splits each — its held-out risk stayed at or below α. (2) The
+system cuts the rate of responses containing an unsupported claim from 38% to
+6.5% in Turkish and from 46% to 0.2% in English at a 92% and 88% answer rate.
+(3) **A threshold certified in English does not transfer to Turkish**: at
+α = 0.05 the transferred threshold's held-out Turkish risk is 0.065, above α in
+84% of splits, because the entailment model accepts 31% of Turkish domain-term
+swaps against 1.3% of English ones. A single-hypothesis transfer test detects
+this with 59 labelled target-language answers instead of the 135 a full
+recalibration needs. Every question is still a machine-drafted draft awaiting
+human verification, and the report says what that does and does not change.
 
 ---
 
@@ -146,111 +158,268 @@ rely on staying still (ADR-0006).
 α, the risk controller abstains. A guessed threshold would be a guarantee-shaped
 string with nothing behind it.
 
+**Drift withdraws the guarantee.** The bound holds only while live traffic is
+exchangeable with the calibration set. Two signals end it: any document change
+after the calibration's corpus snapshot, and a conformal test martingale over
+live risk statistics (Vovk's Simple Jumper) crossing its alarm level. By Ville's
+inequality the chance of *ever* alarming on exchangeable traffic is at most
+1/level — over the calibration's whole lifetime, however often it is checked,
+which a repeated two-sample test cannot offer. Either signal turns every
+response into `abstain(drift_detected)` with `degraded: true` until the
+calibration job runs again (ADR-0009).
+
 ---
 
 ## 4. Experimental setup
 
-**Corpus and queries.** `bootstrap-tr`: 8 hand-written Turkish policy documents
-(service agreement, data retention, remote work, procurement authority, annual
-leave, information security, travel expenses, supplier audit) with deliberate
-distractors — several documents mention notice periods, payment terms, and
-six-monthly reviews, but only one states each specific figure. 27 queries: 24
-answerable, 3 deliberately unanswerable. Gold labels name **documents**, not chunk
-ids, so they survive a change to chunking parameters.
+**Corpora.** Three, all public and fetched by committed scripts:
 
-**Models.** Embeddings `intfloat/multilingual-e5-base`; entailment
-`MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`; generation is
-extractive by default (see §7.2). CPU only.
+- **kvkk-tr / kvkk-en** — Law No. 6698 on the Protection of Personal Data,
+  consolidated with the 2024 amendments, plus three KVKK regulations (erasure
+  and anonymisation, the data controllers' registry, the 2024 transfer-abroad
+  regulation): 90 provisions, one file per article, in Turkish and in the
+  Authority's English translation. The two corpora are **article-aligned**: the
+  same filename is the same provision.
+- **en-public** — 30 English Wikipedia articles in three clusters with
+  deliberate near-duplicate facts (privacy law, space missions, bridges) and 120
+  arXiv abstracts on the topics this report cites.
 
-**Splits.** Calibration and test are disjoint and interleaved deterministically —
-no seed to record, no shuffle to reproduce. The calibration half chooses λ and is
-never used to report what λ delivered.
+**Queries.** 550 per KVKK language — 400 answerable (42 needing two provisions)
+and 150 adversarial questions whose answer is absent (near-miss figures, false
+premises, adjacent law) — and 400 for en-public (340 answerable, 60
+unanswerable). The KVKK sets are **parallel**: the same id is the same question
+in both languages, so a cross-lingual comparison changes nothing but language.
+Every answerable query carries a verbatim evidence quote, checked mechanically
+against the corpus at load time.
+
+All queries were drafted by a language model from the corpus and are **drafts**:
+the PRD requires hand verification, and it has not been done yet. The mechanical
+checks catch fabricated evidence and dangling labels; they cannot catch an
+unnatural question or a wrong "unanswerable". Every number below is on drafts,
+and the harness can restrict any run to verified queries once review is done.
+
+**Losses: injected hallucinations with known locations (ADR-0008).** The
+generator is extractive and cannot hallucinate. Each generated claim is instead
+corrupted with probability 0.15 in one of the three ways retrieval-augmented
+generators fail — a changed number, date or duration; flipped polarity; a
+swapped domain term ("data controller" → "data processor", "Kurul" → "Başkan")
+— by rules written for Turkish and English morphology. The corrupted claim keeps
+its citation, so it points at the passage that contradicts it. A response's
+loss is whether any claim it would *return* was corrupted.
+
+The verifier produces the statistic and the per-claim action; **it no longer
+produces the label**. A corrupted claim the verifier accepts is a loss, so the
+verifier's false-accept rate is inside the bound rather than beneath it — the
+condition the previous draft could only state (§7.3) is now measured. The
+price is that the bound is conditional on the error model instead: these error
+types, at this rate.
+
+The first full run found the error model itself wrong in a way worth recording:
+renumbering a paragraph label — "(2)" to "(1)" — was being counted as a
+hallucination although the provision stays true, as was changing a law number
+inside an amendment annotation, and a Turkish aorist ("yürütür") was being
+"negated" as if it were a copula, producing ungrammatical text any verifier
+rejects. The first made the verifier look worse than it is; the last made it
+look better. Both were found by reading corrupted claims, not by any metric.
+
+**Models.** Embeddings `intfloat/multilingual-e5-base`; reranker
+`BAAI/bge-reranker-v2-m3`; entailment
+`MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` at 512 tokens.
+Retrieval is hybrid (BM25 + dense, RRF, reranked to the top 6); generation takes
+up to four sentences. Apple-silicon GPU (MPS) for evaluation.
+
+**Protocol.** The pipeline runs once per dataset and every claim's scores under
+every verifier variant are recorded with their ground truth; every table is
+derived from those records. Each cell is 200 random splits by query id — 60% to
+choose and certify the threshold, 40% held out — with δ = 0.05, Bonferroni over
+a 50-point λ grid. "Held-out risk" is the mean selective risk on the held-out
+part over the splits that certified; answer rate is averaged over *all* splits,
+since an uncertified split answers nothing.
+
+**Choosing the verifier without looking at the test sets.** Two ways of scoring
+a claim against its cited chunk were compared: the whole chunk as premise, and
+overlapping two-sentence windows with the maximum taken (as SummaC does). The
+choice was made on en-public, treated as a development set, before any KVKK
+result was computed; the KVKK tables report the other one as an ablation.
 
 ---
 
 ## 5. Results
 
+Full tables, including every cell omitted here: `eval/results/experiments.md`,
+regenerated from the committed records by `make eval`.
+
 ### 5.1 Retrieval
 
-Lexical arm only (no embeddings), 24 answerable queries, 12 chunks:
+What generation actually saw — the top six chunks after hybrid retrieval and
+reranking:
 
-| configuration | recall@1 | recall@3 | recall@5 | recall@10 | nDCG@10 | MRR |
-|---|---|---|---|---|---|---|
-| lexical-only | 0.576 | 0.806 | 0.840 | 0.924 | 0.831 | 0.910 |
+| dataset | answerable queries | relevant document in top 6 | gold evidence passage in top 6 |
+|---|---|---|---|
+| kvkk-tr | 400 | 0.970 | 0.960 |
+| kvkk-en | 400 | 0.978 | 0.968 |
+| en-public | 340 | 1.000 | 0.997 |
 
-**Read recall@1 and recall@3.** With 12 chunks in the corpus, a top-10 cut returns
-most of it, so recall@10 flatters any system that returns anything. The harness
-prints this caveat itself rather than trusting a reader to supply it.
-
-Turkish morphology is handled: the query `sözleşme` matches `sözleşmeyi` and
-`sözleşmelerde`, and the unaccented `sozlesme` matches all three. Snowball's
-Turkish stemmer is a suffix stripper rather than a morphological analyser and
-will under-stem long derivational chains; Zemberek is the upgrade path, deferred
-until a measurement justifies running a JVM.
-
-Retrieval returns results for all three unanswerable queries. This is expected,
-not a defect: disjunctive matching retrieves anything sharing a term, so retrieval
-alone cannot identify out-of-corpus questions. It is the first measured evidence
-for why the verifier and risk controller exist.
+Retrieval is not the bottleneck on these corpora: the passage that answers the
+question is in front of the generator 96–100% of the time. The reranker
+ablation was not run (see §7).
 
 ### 5.2 Entailment discrimination
 
-The single measurement the whole thesis rests on. Premise: *"Taraflardan her biri,
-otuz (30) gün önceden yazılı ihbarda bulunmak suretiyle sözleşmeyi feshedebilir."*
+**Per claim, on the evaluation sets.** Clean claims are copied from their cited
+chunk; corrupted claims are the same claims with one number, polarity or domain
+term changed. At the support threshold of 0.5:
 
-| hypothesis | NLI | lexical overlap |
+| dataset | corruption | n | AUROC | false accept | false reject |
+|---|---|---|---|---|---|
+| kvkk-en | number | 22 | 0.986 | 0.000 | 0.440 |
+| kvkk-en | negation | 215 | 0.980 | 0.000 | 0.440 |
+| kvkk-en | term | 80 | 0.955 | **0.013** | 0.440 |
+| kvkk-tr | number | 24 | 0.970 | 0.000 | 0.357 |
+| kvkk-tr | negation | 122 | 0.961 | 0.008 | 0.357 |
+| kvkk-tr | term | 107 | 0.733 | **0.308** | 0.357 |
+| en-public | all | 189 | 0.970 | 0.000 | 0.609 |
+
+The model is conservative everywhere — it rejects 36–61% of claims that are
+verbatim copies of their evidence — and in English it almost never accepts a
+corrupted claim. The exception is the one that decides §5.4: **it accepts 31%
+of Turkish domain-term swaps** ("Kurul" → "Başkan", "veri sorumlusu" → "veri
+işleyen") against 1.3% of the same swaps in English. Numbers and negation it
+handles in both languages.
+
+**Ablations of the verifier** (AUROC, all corruption types): whole-chunk NLI
+0.865 (kvkk-tr) / 0.970 (en-public); token overlap 0.923 / 0.887 but it accepts
+**every** corrupted claim at the support threshold; NLI without citation forcing
+— the claim scored against the best of all retrieved chunks — 0.769 / 0.670,
+with 41% / 34% of corrupted claims accepted. Citation forcing is worth more than
+the choice of scorer.
+
+**Windowed premises trade the wrong way.** Scoring against overlapping
+two-sentence windows of the cited chunk (SummaC-style) cuts false rejects on
+en-public from 61% to 9% — and raises false accepts from 0% to 23%, 35% for
+negation. Chosen against on the development set before any KVKK number was
+computed (§4).
+
+The illustrative pair from the first draft still holds and shows the mechanism
+in one line:
+
+| hypothesis vs. *"…otuz (30) gün önceden yazılı ihbarda bulunmak suretiyle…"* | NLI | lexical overlap |
 |---|---|---|
 | "Fesih ihbar süresi **otuz** gündür." (entailed) | **0.985** | 0.75 |
 | "Fesih ihbar süresi **altmış** gündür." (contradicted) | **0.139** | 0.50 |
-| "Sözleşme hiçbir şekilde feshedilemez." (negation) | 0.000 | — |
-| English: "notice period is thirty days" | 0.992 | — |
-| English: "notice period is sixty days" | 0.005 | — |
 
-One changed word — the number carrying the entire meaning — moves the NLI score
-across the threshold. Lexical overlap scores the contradiction at 0.50, **at the
-default support threshold**, so it ships the false claim as supported. That is why
-overlap is reported as an ablation baseline and never as a verifier.
+### 5.3 The guarantee across α  [G1, G2]
 
-A false negative worth recording: *"Notice must be given in writing"* against a
-premise stating *"giving thirty (30) days written notice"* scored **0.029** — a
-genuinely entailed claim judged unsupported. The verifier is conservative, which
-costs answer rate rather than the guarantee. That is the right direction, and it
-belongs in any account of the answer-rate numbers.
+Held-out selective risk (mean over certified splits, 95% CI), how often a single
+held-out part exceeded α, and answer rate (mean over all splits):
 
-### 5.3 Calibration
+| α | kvkk-en: risk / P(>α) / answer | kvkk-tr: certified / risk / P(>α) / answer | en-public: risk / answer |
+|---|---|---|---|
+| 0.05 | 0.002 ± 0.000 / 0.00 / **0.884** | 0% / — / — / 0.000 | 0.000 / **0.768** |
+| 0.10 | 0.002 / 0.00 / 0.884 | 17% / 0.086 ± 0.002 / 0.06 / 0.146 | 0.000 / 0.768 |
+| 0.125 | 0.002 / 0.00 / 0.884 | 82% / 0.070 ± 0.002 / 0.00 / 0.749 | 0.000 / 0.768 |
+| 0.15–0.35 | 0.002 / 0.00 / 0.884 | 100% / 0.065 ± 0.002 / 0.00 / 0.915 | 0.000 / 0.768 |
 
-Run over `bootstrap-tr` with the NLI verifier, α = 0.05, δ = 0.05, 50-point grid:
+**G1 holds.** Across three datasets and ten α ∈ {0.05, …, 0.35}, every cell that
+certified had mean held-out risk ≤ α. The single-split exceedance of 6% at
+α = 0.10 in Turkish is sampling noise on a 220-query test part, within δ.
 
-```
-calibration n=14   test n=13
-certified: False
-```
+**G2 is met in English and missed in Turkish.** At α = 0.05 the English sets
+answer 88% and 77% of queries. Turkish certifies nothing below α = 0.10 and only
+becomes usable at 0.125: its floor of about 6.5% unsupported responses, set by
+accepted term swaps, is above the budget. That is the procedure refusing to
+quote a bound the data cannot support — the same behaviour the first draft
+reported on 27 queries, now on 550 and for a measured reason.
 
-**Nothing was certified, and this is the machinery working.** With zero observed
-failures the p-value is (1−α)^m, so Bonferroni over a 50-point grid requires
+**The threshold does little; the certificate does a lot.** The certified λ is
+almost always 1.0: in strict mode the per-claim filter already removes what the
+verifier rejects, and the response-level statistic (1 − weakest retained
+support) separates the remaining failures only weakly (AURC 0.061 against a
+flat 0.065 in Turkish). The calibrated gate's contribution is the *certificate* —
+knowing which α the system can honour — rather than extra filtering. A
+statistic that ranks residual failures better is the most direct lever on G2.
 
-    m ≥ ln(δ / |Λ|) / ln(1 − α) = 135
+**Answer rate is not usefulness.** Of all queries, the share answered with a
+claim that restates the gold evidence is 26% (kvkk-tr), 17% (kvkk-en) and 15%
+(en-public), against 34–47% for unfiltered generation. The verifier's
+conservatism removes correct claims along with corrupted ones. And the system
+answers 81–91% of the adversarial questions whose answer is not in the corpus —
+with supported, irrelevant sentences. The guarantee bounds unsupported claims;
+it says nothing about relevance, and out-of-corpus detection is absent (§7).
 
-answered calibration responses at α=0.05 — regardless of system quality. The best
-threshold here answered 14. The calibration job computes this floor and reports it,
-because "the verifier is bad" and "the sample cannot say anything" look identical
-from outside and have opposite fixes.
+### 5.4 Cross-lingual transfer  [G5]
 
-### 5.4 Does the bound hold?
+The parallel sets differ only in language. Splits are by query id, so a
+question calibrated in one language is never tested in the other:
 
-Since the real dataset cannot certify, the procedure is validated where ground
-truth is known by construction: responses whose statistic is informative about
-their loss, overall failure rate 0.25, α = 0.10, 60 independent runs of 4,000
-responses each, split 50/50.
+| α | calibrate → test | held-out risk | P(test risk > α) | answer rate |
+|---|---|---|---|---|
+| 0.05 | EN → EN | 0.002 | 0.00 | 0.884 |
+| 0.05 | **EN → TR** | **0.065** | **0.84** | 0.915 |
+| 0.05 | TR → TR | not certified | — | 0.000 |
+| 0.10 | EN → TR | 0.065 | 0.01 | 0.915 |
+| 0.10 | TR → EN | 0.002 | 0.00 | 0.138 |
+| 0.15 | EN → TR | 0.065 | 0.00 | 0.915 |
 
-Across all certified runs, held-out selective risk stayed at or below α in the
-overwhelming majority — well inside what sampling noise on the held-out half
-explains. Under the marginal formulation (§2.2) the same test fails 56% of the
-time. The test is retained in the suite precisely because it distinguishes those
-two cases, and would also catch a leaked split, an off-by-one in the grid, or a
-missing multiplicity correction.
+**The hypothesis holds: an English-calibrated threshold does not carry its
+guarantee into Turkish.** At α = 0.05 it certifies in English, is applied
+unchanged to Turkish, and delivers 6.5% — above budget in 84% of splits. The
+mechanism is §5.2: the same verifier, on the same provisions, is far more
+willing to accept a swapped legal term in Turkish. In the other direction the
+Turkish threshold is simply conservative in English.
 
-### 5.5 Latency
+**Proposed correction: certify where the data is, verify where it is going.**
+Recalibrating from scratch in the target language needs 135 answered,
+labelled responses at α = 0.05 (Bonferroni over the grid). Testing whether one
+*given* threshold holds needs no multiplicity correction, so its floor is
+ln δ / ln(1 − α) = 59. Applied to all Turkish answers under the English
+threshold (503 answered, 32 failures): at α = 0.05 the transfer test refuses
+(p = 0.93) — correctly; at α = 0.10 it verifies (p = 0.003). The procedure
+catches exactly the failure the naive transfer ships, with under half the
+target-language labels.
+
+### 5.5 Baselines and ablations at matched answer rate  [G4]
+
+At α = 0.15, where every configuration with a model can certify; "risk @
+coverage" is each configuration's risk when answering the same share of queries
+as Aletheia:
+
+| configuration | kvkk-tr: answer / risk / risk @ 0.92 | en-public: answer / risk / risk @ 0.77 |
+|---|---|---|
+| naive RAG, no verifier | 0.996 / 0.380 / 0.380 | 1.000 / 0.388 / 0.388 |
+| post-filter, NLI ≥ 0.5, no gate | 0.915 / 0.064 / — | 0.767 / 0.000 / — |
+| self-consistency (n = 5) | not run | not run |
+| **Aletheia** (NLI, strict, LTT) | **0.915 / 0.065 / 0.064** | **0.768 / 0.000 / 0.000** |
+| (b) token-overlap verifier | 0.267 / 0.096 / 0.324 | 0.000 / — / 0.212 |
+| (c) no citation forcing | 0.001 / 0.191 / 0.181 | 0.000 / — / 0.182 |
+| flagged instead of strict | 0.008 / 0.158 / 0.344 | 0.312 / 0.007 / 0.231 |
+| loss from the verifier (circular) | 0.915 / 0.065 | 0.768 / 0.000 |
+
+**G4 holds** against the baseline that can be run: at the same answer rate the
+naive system's risk is its base rate, 31.5 points higher in Turkish and 38.8 in
+English. The uncalibrated post-filter lands at the same operating point as
+Aletheia, which is what §5.3 predicts — the gain over it is the certificate,
+not the risk. Self-consistency and an LLM judge need a generative model and were
+not run.
+
+**The circular loss is the finding of this table.** Certified on labels the
+verifier produces itself, the Turkish calibration set shows **0 failures in 503
+answered responses** — a bound of essentially zero. Against the truth it is 32
+failures, 6.4%. The first draft could only state that its guarantee was
+conditional on the verifier (§7.3 there); this is the size of that condition.
+
+### 5.6 Does the bound hold where the truth is exact?
+
+The synthetic validation from the first draft stands and is still in the test
+suite: responses whose statistic is informative about their loss, overall
+failure rate 0.25, α = 0.10, 60 runs of 4,000. Held-out selective risk stays at
+or below α in the certified runs; the marginal formulation fails 56% of the
+time. The drift monitor is validated the same way: on 300 exchangeable
+sequences of 400 requests at alarm level 20, 3.7% ever alarmed, under Ville's
+1/20 = 5%; a shift that begins after 1,000 stable requests is caught within 120
+more, and a sustained one from the start within a median of 60.
+
+### 5.7 Latency
 
 Full stack, 20 concurrent, 400 requests, overlap verifier:
 
@@ -319,61 +488,99 @@ A fourth, in the instrument rather than the system: the first load tester report
 timing the rejection path. It now excludes non-2xx from the sample and exits
 non-zero below 90% served.
 
+### 6.4 A hallucination that was not one
+
+The first full evaluation run showed the verifier accepting 16% of corrupted
+Turkish claims. Reading them, a large share were not false: the corruption had
+renumbered a paragraph label — "(2)" to "(1)" — and the provision underneath was
+still true. Others changed the law number inside an amendment annotation. A
+third rule "negated" the verb *yürütür* into the ungrammatical *yürü değildir*,
+which any verifier rejects for the wrong reason. The first two made the verifier
+look worse than it is and the third made it look better; the aggregate number
+looked plausible either way. The fix was rules — paragraph labels, annotations
+and bracketed ids are not facts; a copula is recognised by consonant voicing —
+and a test for each. **The error model is part of the measurement apparatus and
+deserves the same suspicion.**
+
 ---
 
 ## 7. Limitations
 
 Stated plainly, because a project about honest uncertainty cannot be vague here.
 
-**7.1 The evaluation set is far too small.** 27 queries against a requirement of
-~400 hand-verified triples per corpus. This is the binding constraint on every
-number in §5 and the reason §5.3 certifies nothing.
+**7.1 The questions are machine-drafted and unverified.** All 1,500 queries
+were drafted by a language model from the corpus. Evidence quotes are checked
+verbatim against the corpus mechanically, and every unanswerable query was
+checked by searching for its key terms, but the PRD's requirement — a person
+verifies every triple — has not been met. A wrong gold label moves the
+retrieval and usefulness numbers; it does not move the risk numbers, whose loss
+comes from injected corruptions rather than from the gold answers. Review tooling
+exists (`make review`), notes on the doubtful items are in
+`eval/datasets/REVIEW-NOTES.md`, and `--verified-only` restricts any run to what
+a person has signed off.
 
-**7.2 The default generator cannot hallucinate.** Extractive generation copies
-sentences from retrieved chunks. A bound calibrated against it measures retrieval
-quality and verifier strictness, **not** unsupported generation, and does not
-transfer to a generative system. This is stated in the module, the settings, the
-calibration job's output, and the README, because it is the single easiest thing
-to forget when quoting a number.
+**7.2 The bound is conditional on the error model.** Hallucinations are injected
+— numbers, polarity, domain terms, at 15% per claim — not produced by a
+language model. The bound says nothing about fabricated content with no
+counterpart in the evidence, subtle paraphrase drift, omissions, or any
+particular model's error mix. This replaces the first draft's unmeasurable
+condition (verifier accuracy) with a stated, controllable one; it does not
+remove the condition. With a generative backend the machinery is unchanged and
+the gold labels would come from people or a judge.
 
-**7.3 The guarantee is conditional on the verifier.** Calibration labels come from
-the verifier itself, so its error rate is not folded into the bound. Risk control
-with noisy labels is an open research problem, not a solved one.
+**7.3 Relevance is not bounded.** The system answers 81–91% of questions whose
+answer is absent from the corpus, with claims that are supported and
+irrelevant. The guarantee is about support. Out-of-corpus detection — for
+instance a calibrated gate on reranker relevance — is the most important missing
+component for the regulated-domain persona.
 
-**7.4 Exchangeability is assumed and will be violated.** Corpus updates and
-query-distribution shift break it. `corpus_events` records every change and the
-controller refuses calibrations past a maximum age, but age is a crude proxy;
-proper drift detection is not implemented.
+**7.4 The verifier is conservative to the point of cost.** It rejects 36–61% of
+claims copied verbatim from their evidence, which is why useful-answer rates
+are 15–26%. Windowed premises fix the rejections and break the guarantee
+(§5.2). Better Turkish entailment — the 31% false-accept rate on term swaps is
+the binding constraint on G2 in Turkish — is the next investment, and PRD §9
+already names the route (a LoRA fine-tune validated on a few hundred pairs).
 
-**7.5 Cross-lingual transfer is unmeasured.** The headline research question —
-does an English-calibrated threshold hold in Turkish? — needs both languages to
-certify first, which needs §7.1 resolved.
+**7.5 Exchangeability is tested only through the statistic.** The drift monitor
+sees the distribution of risk statistics. A shift in P(loss | statistic) that
+leaves that distribution alone is invisible without labels on live traffic.
 
-**7.6 Latency with the real verifier misses the SLO** by roughly 4× (§5.5).
+**7.6 Not run.** The reranker ablation, verifier ablations on kvkk-en, the
+hallucination-rate sweep (all available as `make collect-ablations`), and the
+self-consistency and LLM-judge baselines, which need a generative model and an
+API key this evaluation did not have.
 
-**7.7 Single-node, single-region, no erasure path.** The append-only store cannot
-satisfy a KVKK/GDPR deletion request; "delete" closes a validity interval and
-retains the rows.
+**7.7 Latency with the real verifier misses the SLO** by roughly 4× (§5.7),
+and **7.8** the deployment is single-node, single-region, with no erasure path:
+the append-only store cannot satisfy a KVKK deletion request.
 
 ---
 
 ## 8. Conclusion
 
-The engineering claim holds: risk control can be embedded in a RAG serving path
-with per-stage tracing, per-tenant admission control, and a failure policy where
-no path produces an unverified answer. The statistical machinery is implemented
-exactly, validated where ground truth is known, and refuses to issue a bound it
-has not earned.
+The engineering claim holds: risk control runs inside a RAG serving path with
+per-stage tracing, per-tenant admission control, a failure policy under which no
+path produces an unverified answer, and an on-line test that withdraws the
+bound when its assumption lapses.
 
-The scientific claim does not hold yet, and the gap is data rather than design.
-Until the evaluation sets reach the sample-size floor derived in §5.3, and until
-generation is genuinely capable of hallucinating, no number here should be read as
-a statement about a deployed system's error rate.
+The statistical claim now holds too, within stated conditions: on 1,500
+questions in two languages, every certified threshold delivered its α on
+held-out data, and a system that would have shipped an unsupported claim in 38–46%
+of responses shipped one in 0.2–6.5%. The cost is answer quality, not answer
+rate — the verifier's conservatism removes correct claims with the false ones.
 
-The most transferable result may be §6: a guarantee, a retrieval stack, and an
-abstention policy each failed in a way that looked correct from the inside. In a
-system built to be honest about uncertainty, the measurement apparatus deserves
-the same suspicion as the thing it measures.
+The research question has an answer: **calibration does not transfer across
+languages for free.** The same entailment model, on the same legal provisions,
+is twenty times more willing to accept a swapped term in Turkish than in
+English, and an English-certified threshold misses its budget in Turkish in 84%
+of splits. Certifying in one language and *verifying* the transferred threshold
+with a single-hypothesis test in the other catches this with under half the
+labels a recalibration needs.
+
+The most transferable lesson is still §6: a guarantee, a retrieval stack, an
+abstention policy and now an error model each failed in a way that looked
+correct from the inside. A measurement apparatus deserves the same suspicion as
+the thing it measures.
 
 ---
 
@@ -387,14 +594,21 @@ the same suspicion as the thing it measures.
 - Bohnet et al. *Attributed Question Answering.*
 - Es et al. *RAGAS.*
 - Cormack et al. *Reciprocal Rank Fusion.*
+- Vovk, Nouretdinov & Gammerman. *Testing exchangeability on-line.* (conformal
+  test martingales, the Simple Jumper)
+- Ville. *Étude critique de la notion de collectif.* (the maximal inequality)
+- Laban et al. *SummaC: Re-visiting NLI-based models for inconsistency detection
+  in summarization.* (windowed premises)
+- Kryściński et al. *Evaluating the factual consistency of abstractive text
+  summarization* (FactCC — rule-based claim corruption).
 
 ## Reproducing
 
 ```bash
-docker compose up --build
-cd python
-python -m aletheia.eval.retrieval --dataset ../eval/datasets/bootstrap-tr --ingest
-VERIFIER_BACKEND=nli python -m aletheia.eval.calibrate \
-  --dataset ../eval/datasets/bootstrap-tr --alpha 0.05
-cd ../gateway && go run ./cmd/loadtest -c 20 -n 400
+docker compose up -d postgres && make testdb
+make corpora                               # re-fetch KVKK TR/EN, Wikipedia, arXiv (optional; committed)
+make collect PY=.venv/bin/python           # run the pipeline once per dataset (~1 h on Apple silicon)
+make eval PY=.venv/bin/python              # every table above -> eval/results/experiments.md
+make review DATASET=kvkk-tr PARALLEL=kvkk-en   # verify the drafted questions by hand
+cd gateway && go run ./cmd/loadtest -c 20 -n 400
 ```

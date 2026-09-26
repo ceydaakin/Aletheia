@@ -17,13 +17,15 @@ P(unsupported claim) <= 0.05, with 95% confidence — calibration_id=cal_2026_07
 …and, when the evidence is too thin to honour it, an `abstain` with a reason code and
 the three best sources instead of a fluent guess.
 
-**Status: the pipeline is real end to end.** Ingestion, the bitemporal store, hybrid
-retrieval, claim decomposition, NLI verification, and Learn-then-Test calibration all
-run; nothing is a stub returning placeholder data. What is *not* done is the science:
-the eval sets are small, and the default generator is extractive and therefore cannot
-hallucinate, so no bound produced today transfers to a generative system. See
-[Where this actually stands](#where-this-actually-stands) below, [docs/PRD.md](docs/PRD.md)
-for the product spec (Turkish), and [docs/adr/](docs/adr/) for the decisions.
+**Status: built and measured; evaluation questions await human verification.**
+Every component runs end to end, the guarantee is evaluated on 1,500 questions over a
+parallel Turkish–English legal corpus and an English public set, and the headline
+research question has an answer: **an English-calibrated threshold does not hold in
+Turkish** (held-out risk 0.065 against α = 0.05, over budget in 84% of splits). The
+questions are machine-drafted and still `draft` until a person verifies them. See
+[Results](#results), [Where this actually stands](#where-this-actually-stands), the
+[technical report](docs/report/aletheia.md), [docs/PRD.md](docs/PRD.md) (Turkish), and
+[docs/adr/](docs/adr/).
 
 ---
 
@@ -137,24 +139,12 @@ cd python
 python -m aletheia.eval.retrieval --dataset ../eval/datasets/bootstrap-tr --ingest
 ```
 
-### Week 3 baseline — bootstrap-tr
-
-24 answerable queries, 3 deliberately unanswerable, 8 documents, 12 chunks, lexical arm
-only (no embeddings):
-
-| configuration | recall@1 | recall@3 | recall@5 | recall@10 | nDCG@10 | MRR |
-|---|---|---|---|---|---|---|
-| lexical-only | 0.576 | 0.806 | 0.840 | 0.924 | 0.831 | 0.910 |
-
-**Read recall@1 and recall@3, not recall@10.** With 12 chunks in the corpus a top-10 cut
-returns most of it, so recall@10 flatters any system that returns anything. This is a
-smoke test with real signal, not a benchmark result — week 4 replaces it with 400
-verified QA triples.
-
-Retrieval returns something for all three unanswerable queries. That is expected, not a
-defect: disjunctive matching retrieves anything sharing a term, so retrieval alone cannot
-identify out-of-corpus questions. Deciding that no answer is supportable is the
-verifier's and the risk controller's job.
+On the evaluation sets, hybrid retrieval with reranking puts the passage that answers
+the question into the top six chunks for 96% (kvkk-tr), 97% (kvkk-en) and 99.7%
+(en-public) of answerable queries. Retrieval returns something for unanswerable queries
+too — disjunctive matching retrieves anything sharing a term — so deciding that no
+answer is supportable is left to the verifier and the risk controller, and on
+relevance (as opposed to support) they do not yet manage it; see the limitations.
 
 ## The guarantee
 
@@ -163,10 +153,16 @@ set, certified by a hypothesis test, and stored with the corpus snapshot it was 
 on:
 
 ```bash
-cd python
-VERIFIER_BACKEND=nli python -m aletheia.eval.calibrate \
-  --dataset ../eval/datasets/bootstrap-tr --alpha 0.05 --curve ../eval/results/curve.json
+make collect DATASETS=kvkk-tr PY=.venv/bin/python   # run the pipeline once, cache responses
+make calibrate DATASET=kvkk-tr ALPHA=0.10 PY=.venv/bin/python
 ```
+
+**The loss is ground truth, not the verifier's opinion** ([ADR-0008](docs/adr/0008-gold-loss-from-controlled-hallucination.md)).
+Generated claims are corrupted at a known rate — a changed number, flipped polarity, a
+swapped legal term — and a response fails if a claim it would return was corrupted. The
+verifier produces the statistic, never the label, so a corrupted claim it accepts is
+inside the bound. Certified instead on the verifier's own labels, the Turkish set shows
+0 failures in 503 answers; the truth is 32.
 
 The risk controller reads that record at request time. **With no certified, fresh
 calibration for the requested α, it abstains** — there is no fallback threshold and no
@@ -186,33 +182,87 @@ regardless of how good the system is. The calibration job computes this and says
 it fails, because "the verifier is bad" and "the sample cannot say anything" look
 identical from outside and have opposite fixes.
 
+## Drift detection
+
+The bound holds only while live traffic is exchangeable with the calibration set
+([ADR-0009](docs/adr/0009-online-drift-detection.md)). Two signals withdraw it: any
+document change after the calibration's corpus snapshot, and a conformal test martingale
+over live risk statistics crossing `DRIFT_ALARM_LEVEL`. By Ville's inequality the chance
+of *ever* raising a false alarm is at most 1/level over the calibration's whole
+lifetime, however often it is checked. Either signal turns responses into
+`abstain(drift_detected)` with `degraded: true` until the calibration job runs again;
+`GET /calibration/{tenant}` shows the martingale.
+
+## Results
+
+1,500 questions: 550 per language on the article-aligned KVKK corpus (400 answerable,
+150 adversarial with no answer in the corpus) and 400 on en-public. δ = 0.05, 200
+random 60/40 splits per cell, claim corruption rate 0.15. Full tables:
+[eval/results/experiments.md](eval/results/experiments.md) (`make eval`).
+
+| | kvkk-en | kvkk-tr | en-public |
+|---|---|---|---|
+| responses with an unsupported claim, no verifier | 46.2% | 38.0% | 38.8% |
+| … with Aletheia at α = 0.15 (held-out) | **0.2%** | **6.5%** | **0.0%** |
+| answer rate at α = 0.05 | **88%** | not certified | **77%** |
+| lowest α that certifies in every split | 0.05 | 0.15 | 0.05 |
+| verifier false-accept rate on swapped legal terms | 1.3% | **30.8%** | — |
+| held-out risk ≤ α in every certified cell (10 α values) | yes | yes | yes |
+
+- **G1 holds**: wherever a threshold was certified, it delivered its α on held-out data.
+- **G5, cross-lingual**: the English α = 0.05 threshold, applied to Turkish, delivers
+  6.5% — over budget in 84% of splits. A single-hypothesis transfer test needs 59
+  labelled Turkish answers (vs 135 to recalibrate) and refuses that transfer correctly.
+- **G2** is met in English and missed in Turkish at α = 0.05, for a measured reason: the
+  entailment model accepts 31% of Turkish term swaps.
+- **Not bounded: relevance.** The system still answers 81–91% of questions whose answer
+  is absent — with supported, irrelevant sentences.
+
+## Evaluation data
+
+| dataset | corpus | queries |
+|---|---|---|
+| `kvkk-tr`, `kvkk-en` | Law 6698 (KVKK, 2024 consolidated) + 3 regulations; 90 provisions per language, **article-aligned** — same filename, same provision | 550 each, parallel ids |
+| `en-public` | 30 Wikipedia articles in near-duplicate clusters + 120 arXiv abstracts | 400 |
+| `bootstrap-tr` | 8 hand-written policy documents | 27 (hand-labelled) |
+
+Corpora are fetched by `scripts/fetch_kvkk.py` and `scripts/fetch_en_public.py`
+(sources and licences in each `SOURCES.md`). Questions were drafted by a language model
+with verbatim evidence checked mechanically, and **every one is `draft` until a person
+verifies it**:
+
+```bash
+make review DATASET=kvkk-tr PARALLEL=kvkk-en   # one decision covers both languages
+make review DATASET=en-public
+```
+
+Items the drafters flagged as doubtful are listed in
+[eval/datasets/REVIEW-NOTES.md](eval/datasets/REVIEW-NOTES.md). Any run can be restricted
+to verified questions with `--verified-only`.
+
 ## Where this actually stands
 
 Honest accounting, because the whole point of this project is not overclaiming.
 
-**Real and measured.** The bitemporal store, hybrid retrieval, claim decomposition, and
-the NLI verifier. The verifier scores `otuz gündür` at 0.985 against its evidence and the
-contradicting `altmış gündür` at 0.139 — the discrimination the entire thesis rests on.
-The lexical-overlap baseline scores that same false claim *above* the support threshold,
-which is why it is a baseline and not a verifier.
-
-**Real but not yet meaningful.** The calibration machinery is verified against synthetic
-data with known ground truth: across 60 runs, thresholds certified at α held on unseen
-data. But on `bootstrap-tr` it correctly certifies *nothing* — 27 queries is far below the
-135-response floor. That is the machinery working, not failing.
+**Real and measured.** Every component, on 1,500 questions in two languages, with a
+loss that does not come from the component under test. The guarantee holds where it
+certifies; the cross-lingual finding is measured and explained.
 
 **Not done.**
 
-- **Eval sets are far too small** (PRD §7.2 asks for ~400 hand-verified triples per
-  corpus; there are 27). This is the binding constraint on every number.
-- **The default generator is extractive** — it copies sentences from retrieved chunks, so
-  it cannot hallucinate. A bound calibrated against it measures retrieval quality and
-  verifier strictness, *not* unsupported generation, and does not transfer. The Anthropic
-  backend exists and needs a key.
-- **The verifier's own error rate is not folded into the bound** (PRD open question 4).
-  Calibration labels come from the verifier, so the guarantee is conditional on it.
-- Weeks 8–12 of the roadmap: gateway hardening, cross-lingual calibration, k3s, OTel,
-  ablation tables, the technical report.
+- **The questions are unverified drafts** (PRD §7.2 requires hand verification).
+  Mechanical checks cover evidence and labels; naturalness and correctness need a
+  person. The risk numbers do not depend on the gold answers; retrieval and usefulness
+  numbers do.
+- **The bound is conditional on the error model**: number, polarity and term errors at
+  a 15% rate — not fabrication, paraphrase drift or omission, and not any particular
+  LLM. The Anthropic backend exists and needs a key.
+- **Relevance is not bounded**; out-of-corpus questions are mostly answered with
+  supported, irrelevant sentences.
+- **The verifier is conservative** (36–61% of verbatim claims rejected), so useful
+  answers are 15–26% of queries, and with it latency misses the SLO by ~4×.
+- **Not run**: reranker and rate ablations (`make collect-ablations`), self-consistency
+  and LLM-judge baselines (need an API key), the live demo and demo video.
 
 ## Repository layout
 
@@ -230,7 +280,8 @@ data. But on `bootstrap-tr` it correctly certifies *nothing* — 27 queries is f
 | `eval/datasets/` | Labelled corpora. Gold labels name documents, not chunk ids, so they survive a chunking change. |
 | `docs/` | PRD, ADRs, and the technical report. |
 | `ops/k8s/` | k3s manifests. Secrets are created out of band; see `secret.example.yaml`. |
-| `ops/` | Prometheus/Grafana config; k3s manifests land here in week 10. |
+| `ops/` | Prometheus/Grafana config. |
+| `eval/datasets/` + `eval/results/` | Corpora, drafted questions, cached pipeline records, and the generated result tables. |
 
 ## Development
 
@@ -270,16 +321,16 @@ including `tenants`.
 |---|---|
 | 1 | Scope lock, corpora, repo skeleton |
 | 2 | Ingestion + bitemporal chunk store |
-| 3 | **Hybrid retrieval + reranker — you are here** |
-| 4 | EN eval set v1 (400 verified QA triples) |
-| 5 | Cited generation + claim decomposer |
-| 6 | Verifier integration |
-| 7 | **Risk controller + calibration — critical path** |
-| 8 | **Go gateway hardening, admission control, p95 measured — done** |
-| 9 | TR corpus + cross-lingual calibration — blocked on eval-set size |
-| 10 | **k3s deployment, OTel, Grafana — done** |
-| 11 | Ablations + final result tables — blocked on eval-set size |
-| 12 | **Technical report + blog post — done; demo video outstanding** |
+| 3 | Hybrid retrieval + reranker — done |
+| 4 | Eval sets: 1,500 questions drafted and mechanically checked — **human verification pending** |
+| 5 | Cited generation + claim decomposer — done |
+| 6 | Verifier integration; discrimination by error type reported — done |
+| 7 | Risk controller + calibration on gold labels (ADR-0008) — done |
+| 8 | Go gateway hardening, admission control, p95 measured — done |
+| 9 | TR corpus + cross-lingual calibration — done; transfer fails at α = 0.05, transfer test proposed |
+| 10 | k3s deployment, OTel, Grafana; drift detection (ADR-0009) — done |
+| 11 | Ablations + final result tables — done, reranker/rate ablations not run |
+| 12 | Technical report — updated; demo video out of scope |
 
 Week 7 is the critical path. If the schedule slips, the Turkish track (week 9) narrows;
 the risk controller never does.
@@ -290,8 +341,10 @@ The guarantee rests on **exchangeability** between the calibration set and live 
 Corpus updates and query-distribution shift break it. Drift detection is therefore not a
 nice-to-have but part of the guarantee: when drift is detected the system enters degraded
 mode and says so in the response, rather than quietly continuing to quote a bound that no
-longer holds. The verifier's own error rate is likewise not yet folded into the bound —
-see open question 4 in the PRD.
+longer holds — which is implemented, with the caveat that it can only see shifts in
+the risk statistic, not in P(loss | statistic). The verifier's own error rate *is* now
+inside the bound (the loss is ground truth, ADR-0008), at the price of conditioning it
+on the injected error model instead — PRD open question 4, answered for that model.
 
 ## License
 

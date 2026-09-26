@@ -5,8 +5,8 @@
 | Alan | Değer |
 |---|---|
 | Doküman sahibi | Ceyda Akın |
-| Versiyon | v0.1 (draft) |
-| Durum | Proposed |
+| Versiyon | v0.2 |
+| Durum | Uygulandı; eval setleri insan doğrulaması bekliyor (bkz. §13) |
 | Hedef süre | 12 hafta (haftada ~12–15 saat) |
 | Ana çıktılar | Açık kaynak repo + canlı demo + teknik rapor/workshop paper + TR-EN eval seti |
 
@@ -266,12 +266,12 @@ Karşılaştırma **aynı answer rate'te hata oranı** üzerinden yapılır — 
 
 ## 10. Çıktı paketi (Definition of Done)
 
-- [ ] Public repo: temiz README, mimari diyagram, `docker compose up` ile ayağa kalkar, tek komutla eval.
-- [ ] Canlı demo (kendi korpusunu yükle → risk bütçesi seç → cevabı ve kanıt kırılımını gör).
-- [ ] 8–12 sayfalık teknik rapor: yöntem, deneyler, ablasyonlar, sınırlılıklar. Workshop başvurusu için hazır format.
-- [ ] Yayımlanmış TR-EN eval seti + kalibrasyon protokolü (bu tek başına atıf alabilecek bir katkı).
-- [ ] 3 dakikalık demo videosu.
-- [ ] Blog yazısı: "RAG'de doğruluk bir umut değil, bir parametredir."
+- [x] Public repo: temiz README, mimari diyagram, `docker compose up` ile ayağa kalkar, tek komutla eval (`make collect && make eval`).
+- [ ] Canlı demo (kendi korpusunu yükle → risk bütçesi seç → cevabı ve kanıt kırılımını gör). *Kapsam dışı bırakıldı.*
+- [x] Teknik rapor: yöntem, deneyler, ablasyonlar, sınırlılıklar (`docs/report/aletheia.md`).
+- [~] TR-EN eval seti + kalibrasyon protokolü: paralel KVKK setleri (550×2) ve en-public (400) hazır, **taslak** — insan doğrulaması bekliyor (`make review`).
+- [ ] 3 dakikalık demo videosu. *Kapsam dışı bırakıldı.*
+- [x] Blog yazısı taslağı (`docs/report/blog-post.md`).
 
 ---
 
@@ -292,3 +292,13 @@ Karşılaştırma **aynı answer rate'te hata oranı** üzerinden yapılır — 
 - Gao et al. — *RARR: Attributed text generation via post-hoc research and revision*
 - Bohnet et al. — *Attributed Question Answering* (AIS değerlendirme çerçevesi)
 - Es et al. — *RAGAS*
+
+---
+
+## 13. v0.2 notları — planın neresinde sapıldı
+
+- **Korpuslar.** TR-Domain = KVKK 6698 + üç KVKK yönetmeliği; Kurum'un İngilizce çevirisiyle **madde madde paralel** (kvkk-en). Paralellik, G5'teki diller arası deneyi dil dışında her şeyi sabit tutarak yapmayı sağlıyor. EN-Domain (SEC 10-K) yapılmadı: EDGAR, User-Agent'ta iletişim e-postası istiyor.
+- **Eval seti.** Sorular bir dil modeliyle taslak olarak üretildi, kanıt alıntıları korpusa karşı mekanik olarak doğrulandı; §7.2'nin istediği **elle doğrulama henüz yapılmadı**. Tüm sonuçlar taslak set üzerinde; `--verified-only` doğrulanmış alt kümeyle yeniden koşar.
+- **Kayıp tanımı (ADR-0008).** LLM anahtarı olmadığından üretim extractive; halüsinasyon, bilinen konumlara kontrollü bozma (sayı, olumsuzlama, terim) ile enjekte edildi ve kayıp bu ground truth'tan okunuyor. Açık soru 4'ün (verifier hatası garantiye nasıl girer) bu hata modeli için cevabı: etiket verifier'dan gelmediği için verifier'ın yanlış kabulleri sınırın içinde.
+- **Drift (ADR-0009).** Yaş vekili yerine: korpus değişikliği + canlı istatistikler üzerinde conformal test martingale.
+- **Baseline'lar.** Self-consistency ve LLM-as-judge LLM gerektirdiği için koşulmadı; yerine sabit eşikli verifier post-filtresi raporlandı.
