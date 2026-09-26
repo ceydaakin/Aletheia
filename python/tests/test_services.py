@@ -79,6 +79,23 @@ def test_extractive_generation_cites_everything_it_says() -> None:
         assert all(c["citations"] == ["c1"] for c in claims)
 
 
+def test_extractive_sentences_survive_thousands_separators_and_headings() -> None:
+    """A claim is a whole sentence. Splitting "10.000" at its dot produced the
+    fragment "000) Türk Lirası ..." — a claim nobody wrote and nothing entails —
+    and a markdown heading glued itself onto the next sentence."""
+    from aletheia.generation.providers import ExtractiveGenerator
+
+    chunk = Chunk(
+        chunk_id="c1", doc_id="d1",
+        text="## Harcama Limitleri\n\n10.000 (on bin) Türk Lirasına kadar harcamalar "
+             "için müdür onayı gerekir. Fazlası için direktör onayı gerekir.",
+    )
+    answer = ExtractiveGenerator().generate("harcama onayı müdür", [chunk], max_claims=4)
+    assert "10.000 (on bin) Türk Lirasına kadar" in answer
+    assert "\n000)" not in answer and not answer.startswith("000")
+    assert "##" not in answer
+
+
 def test_generation_with_no_chunks_produces_nothing() -> None:
     """Nothing retrieved means nothing to ground an answer in. Returning empty
     lets the gateway abstain rather than inviting a model to fill the gap."""
@@ -126,3 +143,15 @@ def test_unknown_fields_are_rejected() -> None:
             json={"tenant_id": "acme", "claims": [], "chunks": [], "temperature": 0.7},
         )
         assert resp.status_code == 422
+
+
+def test_extractive_generation_skips_fragments_cut_at_a_chunk_boundary() -> None:
+    """A chunk can end mid-sentence. The unfinished tail is not a claim anyone
+    made, nothing entails it, and it cost answer rate on every query."""
+    from aletheia.generation.providers import ExtractiveGenerator
+
+    chunk = Chunk(chunk_id="c1", doc_id="d1",
+                  text="Başvuru otuz gün içinde sonuçlandırılır. İlgili kişi başvuru sonucunda kişisel verilerin")
+    answer = ExtractiveGenerator().generate("başvuru kişisel veri", [chunk], max_claims=4)
+    assert "otuz gün" in answer
+    assert "verilerin [" not in answer

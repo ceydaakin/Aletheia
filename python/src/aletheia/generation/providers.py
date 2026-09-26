@@ -31,12 +31,11 @@ import re
 from typing import Protocol
 
 from aletheia.contracts import Chunk
-from aletheia.generation.decompose import decompose
+from aletheia.generation.decompose import decompose, split_sentences
 from aletheia.settings import Settings
 
 log = logging.getLogger("generation.providers")
 
-_SENTENCE = re.compile(r"[^.!?…]+[.!?…]", re.DOTALL)
 _WORD = re.compile(r"\w+", re.UNICODE)
 
 
@@ -149,11 +148,16 @@ class AnthropicGenerator:
 
 
 def _sentences(text: str) -> list[str]:
-    found = [m.group(0).strip() for m in _SENTENCE.finditer(text)]
-    if found:
-        return found
-    stripped = text.strip()
-    return [stripped] if stripped else []
+    """Sentences of a chunk, split the way the decomposer splits them.
+
+    One splitter for both, so "10.000 TL" and "1. madde" stay whole here too —
+    the naive split on every period turned them into fragments no premise
+    entails. Markdown headings are dropped: they are labels, not claims.
+    """
+    body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    sentences = [" ".join(s.split()) for s in split_sentences(body)]
+    # A chunk can end mid-sentence; its unfinished tail is not a claim.
+    return [s for s in sentences if s and s[-1] in ".!?…"]
 
 
 def drop_unknown_citations(answer: str, chunks: list[Chunk]) -> str:
