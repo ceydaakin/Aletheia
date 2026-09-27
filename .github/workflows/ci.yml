@@ -36,7 +36,7 @@ jobs:
         working-directory: gateway
         run: go build ./...
 
-  services:
+  python:
     name: Services (Python)
     runs-on: ubuntu-latest
 
